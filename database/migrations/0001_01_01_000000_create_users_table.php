@@ -15,10 +15,21 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('mobile', 30)->nullable();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
+            // Fixed system roles: super_admin, branch_admin, manager (see App\Enums\Role).
+            $table->string('role', 30)->default('manager')->index();
+            // Branch FK is added in the branches migration (branches table does not exist yet).
+            $table->unsignedBigInteger('branch_id')->nullable()->index();
+            // Manager lead visibility: 'campaign' = all branch leads in assigned campaigns, 'assigned' = only own leads.
+            $table->string('lead_visibility', 20)->default('campaign');
+            $table->boolean('is_active')->default(true)->index();
+            $table->timestamp('last_login_at')->nullable();
+            $table->timestamp('notifications_read_at')->nullable();
             $table->rememberToken();
             $table->timestamps();
+            $table->softDeletes();
         });
 
         Schema::create('password_reset_tokens', function (Blueprint $table) {
