@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\PublicLeadForm;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -73,7 +74,7 @@ class PublicLeadFormTest extends TestCase
 
     public function test_public_form_validates_campaign_and_manager_belong_to_branch(): void
     {
-        $other = \App\Models\Campaign::factory()->forBranches([$this->branchB])->create();
+        $other = Campaign::factory()->forBranches([$this->branchB])->create();
         $this->post("/public/leads/{$this->token}", $this->submission(['campaign_id' => $other->id, 'assigned_to' => null]))->assertSessionHasErrors('campaign_id');
         $this->post("/public/leads/{$this->token}", $this->submission(['assigned_to' => $this->managerB->id]))->assertSessionHasErrors('assigned_to');
         $this->post("/public/leads/{$this->token}", $this->submission(['assigned_to' => $this->solarManagerA->id]))->assertSessionHasErrors('assigned_to');
@@ -142,7 +143,7 @@ class PublicLeadFormTest extends TestCase
     {
         $this->getJson("/public/leads/{$this->token}/campaigns/{$this->iva->id}")->assertOk()
             ->assertExactJson(['managers' => [['id' => $this->managerA->id, 'name' => $this->managerA->name]], 'lead_statuses' => [], 'payment_statuses' => []]);
-        $other = \App\Models\Campaign::factory()->forBranches([$this->branchB])->create();
+        $other = Campaign::factory()->forBranches([$this->branchB])->create();
         $this->getJson("/public/leads/{$this->token}/campaigns/{$other->id}")->assertNotFound();
     }
 }

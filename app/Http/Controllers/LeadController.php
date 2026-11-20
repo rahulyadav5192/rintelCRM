@@ -89,7 +89,7 @@ class LeadController extends Controller
         $lead->load([
             'branch:id,name', 'campaign:id,name,code', 'assignee:id,name,email', 'creator:id,name',
             'leadStatus:id,name,color', 'paymentStatus:id,name,color',
-            'leadNotes.user:id,name', 'activities.user:id,name',
+            'activities.user:id,name',
         ]);
         $updatedBy = $lead->updated_by ? User::withTrashed()->find($lead->updated_by, ['id', 'name']) : null;
 
@@ -107,9 +107,6 @@ class LeadController extends Controller
                 'payment_status' => $lead->paymentStatus?->only('name', 'color'),
                 'created_at' => $lead->created_at?->toIso8601String(),
                 'updated_at' => $lead->updated_at?->toIso8601String(),
-                'notes_list' => $lead->leadNotes->map(fn ($n) => [
-                    'id' => $n->id, 'body' => $n->body, 'user' => $n->user?->name, 'created_at' => $n->created_at?->toIso8601String(),
-                ]),
                 'activities' => $lead->activities->map(fn ($a) => [
                     'id' => $a->id, 'type' => $a->type, 'description' => $a->description, 'user' => $a->user?->name ?? 'System',
                     'old_values' => $a->old_values, 'new_values' => $a->new_values, 'created_at' => $a->created_at?->toIso8601String(),
@@ -142,9 +139,16 @@ class LeadController extends Controller
             return $b;
         })->values()->all();
 
+        $lead->load(['leadStatus:id,name', 'paymentStatus:id,name', 'assignee:id,name']);
+
         return Inertia::render('Leads/Edit', [
             ...$options,
             'lead' => $this->leadFormData($lead),
+            'currentOptions' => [
+                'lead_status' => $lead->leadStatus?->only('id', 'name'),
+                'payment_status' => $lead->paymentStatus?->only('id', 'name'),
+                'assignee' => $lead->assignee?->only('id', 'name'),
+            ],
             'abilities' => [
                 'editDetails' => $user->hasPermission(Permission::EditLeads),
                 'changeBranch' => $user->isSuperAdmin(),

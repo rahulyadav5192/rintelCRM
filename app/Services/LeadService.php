@@ -8,7 +8,6 @@ use App\Models\Campaign;
 use App\Models\CampaignLeadStatus;
 use App\Models\CampaignPaymentStatus;
 use App\Models\Lead;
-use App\Models\LeadActivity;
 use App\Models\PublicLeadForm;
 use App\Models\Setting;
 use App\Models\User;
@@ -254,7 +253,7 @@ class LeadService
             $note = $lead->leadNotes()->make(['body' => $body]);
             $note->user_id = $actor->id;
             $note->save();
-            $this->activity($lead, $actor, 'note_added', 'Note added', null, ['note' => mb_substr($body, 0, 200)]);
+            $this->activity($lead, $actor, 'note_added', 'Note added', null, ['note' => $body]);
         });
     }
 

@@ -61,7 +61,7 @@ class CampaignStatusController extends Controller
         $data = $this->validated($request, $campaign, $type, $record->id);
         $before = $record->only('name', 'color', 'is_default', 'is_active');
 
-        if (($data['is_active'] ?? true) === false && ($data['is_default'] ?? false)) {
+        if (($data['is_active'] ?? true) === false && (($data['is_default'] ?? false) || $record->is_default)) {
             return back()->withErrors(['is_active' => 'The default status cannot be deactivated.']);
         }
 

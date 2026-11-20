@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Permission;
+use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -49,7 +50,7 @@ class HandleInertiaRequests extends Middleware
             ],
             // Navigation hints only — every route is independently authorized on the server.
             'can' => [
-                'viewBranches' => $user->can('viewAny', \App\Models\Branch::class),
+                'viewBranches' => $user->can('viewAny', Branch::class),
                 'viewCampaigns' => $user->can('viewAny', Campaign::class),
                 'viewUsers' => $user->can('viewAny', User::class),
                 'managePublicForms' => $user->can('manage-public-forms'),

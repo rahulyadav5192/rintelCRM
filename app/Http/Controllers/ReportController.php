@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\CampaignLeadStatus;
 use App\Models\CampaignPaymentStatus;
+use App\Models\Lead;
 use App\Models\User;
 use App\Services\ActivityLogger;
 use App\Services\LeadFilters;
@@ -50,7 +51,7 @@ class ReportController extends Controller
         $total = array_sum(array_column($rows, 'total'));
 
         if (in_array($request->query('export'), ['csv', 'xlsx'], true)) {
-            $this->authorize('export', \App\Models\Lead::class);
+            $this->authorize('export', Lead::class);
             ActivityLogger::log('exports', 'report.exported', self::TYPES[$type].' report exported as '.strtoupper($request->query('export')), null, null, ['type' => $type, 'filters' => $filters]);
 
             return SpreadsheetExporter::download($request->query('export'), "report-{$type}", [self::TYPES[$type] === 'Date-wise' ? 'Date' : 'Name', 'Leads', 'Share %'],
@@ -65,7 +66,7 @@ class ReportController extends Controller
             'rows' => $rows,
             'total' => $total,
             'filters' => $filters,
-            'canExport' => $user->can('export', \App\Models\Lead::class),
+            'canExport' => $user->can('export', Lead::class),
             'filterOptions' => [
                 'branches' => $user->isSuperAdmin() ? Branch::orderBy('name')->get(['id', 'name']) : [],
                 'campaigns' => Campaign::query()->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name']),

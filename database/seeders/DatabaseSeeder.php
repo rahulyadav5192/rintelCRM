@@ -76,8 +76,8 @@ class DatabaseSeeder extends Seeder
                         ]);
                         $lead->lead_status_id = $statuses->random()->id;
                         $lead->payment_status_id = $payments->random()->id;
-                        $lead->created_by = $super->id;
                         $lead->source = $i % 6 === 0 ? 'public' : 'manual';
+                        $lead->created_by = $lead->source === 'public' ? null : $super->id;
                         $lead->save();
                         $lead->lead_number = 'RL-'.str_pad((string) $lead->id, 6, '0', STR_PAD_LEFT);
                         $lead->saveQuietly();

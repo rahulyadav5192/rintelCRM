@@ -1,58 +1,73 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Rintel Lead CRM
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Multi-branch, multi-campaign lead management CRM built with **Laravel 13**, **Inertia.js v3**, **React 19**, **Tailwind CSS 4**, **Lucide** icons and **MySQL**.
 
-## About Laravel
+## Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Roles**: Super Admin (unrestricted), Branch Admin (own branch + assigned campaigns), Manager (assigned campaigns; per-user lead visibility of *all branch leads in campaign* or *only assigned leads*).
+- **Per-user permissions**: create, edit details, assign, update lead status, update payment status, delete, export, view reports, manage branch managers.
+- **Branches, campaigns and per-campaign statuses** — all database-driven: lead and payment statuses are created, renamed, recoloured, reordered, defaulted and deactivated per campaign.
+- **Leads**: backend-generated IDs (`RL-000123`, prefix configurable), dynamic branch → campaign → advisor/status dropdowns, notes, full activity timeline, follow-up dates, soft delete.
+- **Public lead forms**: one secure URL per branch (256-bit token stored as SHA-256 hash + encrypted copy), reset/deactivate, rate limiting, honeypot + timing spam protection.
+- **Dashboards** per role, **reports** (branch / campaign / manager / status / payment / date-wise), **CSV & Excel export**, **activity log**, in-app notifications.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Security model
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+All authorization is server-side:
 
-## Learning Laravel
+- `Lead::scopeVisibleTo($user)` (`app/Models/Lead.php`) is the single lead-visibility rule. Listing, detail pages, exports, dashboards, reports, notifications and lookups all go through it, so changing an ID in a URL or request never widens access.
+- Policies (`app/Policies`) and gates (`AppServiceProvider`) protect every route.
+- `LeadService` validates every branch ↔ campaign ↔ advisor ↔ status combination and enforces per-field permissions on update.
+- The database enforces that a lead's lead/payment status belongs to the lead's campaign (composite foreign keys).
+- Sensitive attributes (role, branch, lead number, assignment, statuses) are not mass assignable.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Setup
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Requirements: PHP 8.3+, Composer, Node 20+, MySQL 8 / MariaDB 10.6+.
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+cp .env.example .env      # set DB_DATABASE / DB_USERNAME / DB_PASSWORD
+php artisan key:generate
+php artisan migrate --seed
+npm install
+npm run build             # or: npm run dev
+php artisan serve
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### Sample accounts (password: `password`)
 
-## Contributing
+| Email | Role | Scope |
+|---|---|---|
+| superadmin@rintel.test | Super Admin | Everything |
+| branchadmin@rintel.test | Branch Admin | Main Branch — IVA, TDS, Solar, HDR (can export, delete, manage managers) |
+| branch2admin@rintel.test | Branch Admin | Branch 2 — IVA, TDS |
+| manager@rintel.test | Manager | Main Branch — IVA, TDS (edit, export, reports, create) |
+| manager2@rintel.test | Manager | Main Branch — Solar, HDR (status/payment only) |
+| manager3@rintel.test | Manager | Branch 2 — IVA, TDS, Solar (sees only assigned leads) |
+| manager4@rintel.test | Manager | Branch 2 — Solar |
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Public form URLs for each branch are listed under **Public Lead Forms** when signed in as Super Admin.
 
-## Code of Conduct
+## Tests
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Tests run against a MySQL database named `rintel_crm_test` (see `phpunit.xml`):
 
-## Security Vulnerabilities
+```bash
+php artisan test
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+They cover role scoping, IDOR attempts, edit/assign/export permissions, campaign-specific status validation, public form branch binding, token reset, inactive branch/campaign handling, spam protection and rate limiting.
 
-## License
+## Project layout
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```
+app/Enums             Role, Permission
+app/Models            Eloquent models + access scopes
+app/Policies          LeadPolicy, BranchPolicy, CampaignPolicy, UserPolicy
+app/Services          LeadService, LeadFilters, LeadStats, ActivityLogger
+app/Http/Controllers  One controller per module
+resources/js/components  Reusable UI (DataTable, FormInput, Modal, StatusBadge, …)
+resources/js/layouts     AppLayout, Sidebar, Header
+resources/js/pages       Inertia pages per module
+```

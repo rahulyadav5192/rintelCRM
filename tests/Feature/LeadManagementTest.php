@@ -6,6 +6,7 @@ use App\Enums\Permission;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\CrmScenario;
 use Tests\TestCase;
@@ -111,7 +112,7 @@ class LeadManagementTest extends TestCase
 
     public function test_database_rejects_a_status_from_another_campaign(): void
     {
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
         $this->ivaLeadA->lead_status_id = $this->solar->leadStatuses()->first()->id;
         $this->ivaLeadA->save();
     }
