@@ -10,9 +10,9 @@ Multi-campaign lead management CRM built with **Laravel 13**, **Inertia.js v3**,
   - **Manager**: global (not tied to any admin). Works leads in their assigned campaigns, with per-user visibility of *all leads in their campaigns* or *only leads assigned to them*.
 - **Per-user permissions**: create, edit details, assign, update lead status, update payment status, delete, export, view reports.
 - **Campaigns and per-campaign statuses**, all stored in the database. The **Status Management** page creates a lead or payment status once and adds it to any number of campaigns, and edits (rename, recolour, activate or deactivate) it across campaigns in one step. Per-campaign ordering and defaults are still configured on each campaign.
-- **Leads**: backend-generated IDs (`RL-000123`, prefix configurable), dynamic branch → campaign → advisor/status dropdowns, notes, full activity timeline, follow-up dates, soft delete.
+- **Leads**: backend-generated IDs (`RL-000123`, prefix configurable), dynamic campaign → owner / advisor / status dropdowns, notes, full activity timeline, follow-up dates, soft delete.
 - **Public lead forms**: every Admin gets one secure URL automatically (256-bit token stored as a SHA-256 hash plus an encrypted copy). Leads submitted through it are owned by that Admin, and visitors can only pick that Admin's active, public campaigns. Super Admins can reset or deactivate any URL; Admins can view and copy their own. Submissions are rate-limited, with honeypot and timing checks against spam.
-- **Dashboards** per role, **reports** (branch / campaign / manager / status / payment / date-wise), **CSV & Excel export**, **activity log**, in-app notifications.
+- **Dashboards** per role, **reports** (admin / campaign / manager / status / payment / date-wise), **CSV & Excel export**, **activity log**, in-app notifications.
 
 ## Security model
 
@@ -20,9 +20,9 @@ All authorization is server-side:
 
 - `Lead::scopeVisibleTo($user)` (`app/Models/Lead.php`) is the single lead-visibility rule. Listing, detail pages, exports, dashboards, reports, notifications and lookups all go through it, so changing an ID in a URL or request never widens access.
 - Policies (`app/Policies`) and gates (`AppServiceProvider`) protect every route.
-- `LeadService` validates every branch ↔ campaign ↔ advisor ↔ status combination and enforces per-field permissions on update.
+- `LeadService` validates every owner ↔ campaign ↔ advisor ↔ status combination and enforces per-field permissions on update.
 - The database enforces that a lead's lead/payment status belongs to the lead's campaign (composite foreign keys).
-- Sensitive attributes (role, branch, lead number, assignment, statuses) are not mass assignable.
+- Sensitive attributes (role, lead owner, lead number, assignment, statuses) are not mass assignable.
 
 ## Setup
 
