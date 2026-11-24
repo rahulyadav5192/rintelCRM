@@ -56,12 +56,13 @@ export default function Show({ user, assignedLeads, leadActivity, systemActivity
                         rows={assignedLeads.data}
                         meta={assignedLeads}
                         rowHref={(l) => `/leads/${l.id}`}
-                        toolbar={<p className="px-1 text-sm font-semibold text-ink">Assigned leads <span className="font-normal text-muted">({assignedLeads.total})</span></p>}
-                        empty={<EmptyState icon={UsersRound} title="No leads assigned" />}
+                        toolbar={<p className="px-1 text-sm font-semibold text-ink">{user.role === 'admin' ? 'Owned leads' : 'Assigned leads'} <span className="font-normal text-muted">({assignedLeads.total})</span></p>}
+                        empty={<EmptyState icon={UsersRound} title={user.role === 'admin' ? 'This admin owns no leads yet' : 'No leads assigned'} />}
                         columns={[
                             { key: 'lead_number', label: 'Lead ID', render: (l) => <Link href={`/leads/${l.id}`} className="font-medium text-primary-600">{l.lead_number}</Link> },
                             { key: 'name', label: 'Name' },
                             { key: 'campaign', label: 'Campaign' },
+                            ...(user.role === 'admin' ? [{ key: 'assignee', label: 'Advisor', render: (l) => l.assignee ?? <span className="text-muted italic">Unassigned</span> }] : []),
                             { key: 'lead_date', label: 'Date', render: (l) => formatDate(l.lead_date) },
                             { key: 'lead_status', label: 'Status', render: (l) => <StatusBadge color={l.lead_status?.color}>{l.lead_status?.name}</StatusBadge> },
                             { key: 'payment_status', label: 'Payment', render: (l) => <StatusBadge color={l.payment_status?.color}>{l.payment_status?.name}</StatusBadge> },
@@ -86,12 +87,23 @@ export default function Show({ user, assignedLeads, leadActivity, systemActivity
                     <Card title="Profile">
                         <DetailList items={[
                             { label: 'Mobile', value: user.mobile, full: true },
-                            { label: 'Branch', value: user.branch ?? (user.role === 'super_admin' ? 'All branches' : null), full: true },
-                            user.role === 'manager' && { label: 'Lead visibility', value: user.lead_visibility === 'assigned' ? 'Only assigned leads' : 'All branch leads in campaigns', full: true },
+                            user.role === 'manager' && { label: 'Lead visibility', value: user.lead_visibility === 'assigned' ? 'Only assigned leads' : 'All leads in their campaigns', full: true },
                             { label: 'Last login', value: user.last_login_at ? formatDateTime(user.last_login_at) : 'Never', full: true },
                             { label: 'Created', value: formatDate(user.created_at), full: true },
                         ]} />
                     </Card>
+                    {user.role === 'admin' && (
+                        <Card title="Public lead form" actions={<Button variant="ghost" size="sm" href="/public-forms">Manage</Button>}>
+                            {user.public_form ? (
+                                <div className="space-y-2 text-sm">
+                                    <input readOnly value={user.public_form.url} onFocus={(e) => e.target.select()} className="input h-9 font-mono text-xs" />
+                                    <p className="text-muted">{user.public_form.is_active ? 'Accepting submissions' : 'Disabled'} · {user.public_form.submissions_count} submissions</p>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted">No public URL yet.</p>
+                            )}
+                        </Card>
+                    )}
                     <Card title="Campaign access">
                         {user.role === 'super_admin' ? <p className="text-sm text-muted">All campaigns</p> : user.campaigns.length ? (
                             <div className="flex flex-wrap gap-2">{user.campaigns.map((c) => <StatusBadge key={c.id} color="blue" dot={false}>{c.name}</StatusBadge>)}</div>

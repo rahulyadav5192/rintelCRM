@@ -8,7 +8,7 @@ use Illuminate\Validation\Rule;
 
 /**
  * Field-level validation for creating/updating leads. Relationship validity
- * (branch ↔ campaign ↔ manager ↔ statuses) and per-field permissions are enforced by LeadService.
+ * (owner ↔ campaign ↔ manager ↔ statuses) and per-field permissions are enforced by LeadService.
  * Note there is intentionally no lead_number rule: a submitted lead ID is never read.
  */
 class LeadRequest extends FormRequest
@@ -38,7 +38,7 @@ class LeadRequest extends FormRequest
             'email' => ['nullable', 'email:rfc', 'max:255'],
             'house_number' => ['nullable', 'string', 'max:50'],
             'post_code' => ['nullable', 'string', 'max:20', 'regex:/^[A-Z0-9 ]{2,10}$/'],
-            'branch_id' => ['nullable', 'integer'],
+            'admin_id' => ['nullable', 'integer'],
             'campaign_id' => ['required', 'integer'],
             'assigned_to' => ['nullable', 'integer'],
             'lead_status_id' => ['nullable', 'integer'],

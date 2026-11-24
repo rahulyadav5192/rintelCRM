@@ -1,18 +1,12 @@
-import { useMemo } from 'react';
 import Card from '@/components/Card';
 import FormInput from '@/components/FormInput';
 import FormTextarea from '@/components/FormTextarea';
 import Toggle from '@/components/Toggle';
 import CheckboxList from '@/components/CheckboxList';
 
-export default function CampaignForm({ form, branches, managers }) {
+export default function CampaignForm({ form, admins, managers }) {
     const { data, setData, errors } = form;
-    const selectedBranches = new Set(data.branch_ids.map(String));
-    // Only managers of selected branches can work this campaign; others are shown disabled.
-    const managerOptions = useMemo(
-        () => managers.map((m) => ({ value: m.id, label: m.name, hint: `${m.branch ?? 'No branch'}${m.is_active ? '' : ' · inactive'}`, disabled: !selectedBranches.has(String(m.branch_id)) && !data.manager_ids.map(String).includes(String(m.id)) })),
-        [managers, data.branch_ids, data.manager_ids], // eslint-disable-line react-hooks/exhaustive-deps
-    );
+    const userOptions = (list) => list.map((u) => ({ value: u.id, label: u.name, hint: `${u.email}${u.is_active ? '' : ' · inactive'}` }));
 
     return (
         <div className="space-y-6">
@@ -23,16 +17,16 @@ export default function CampaignForm({ form, branches, managers }) {
                     <FormTextarea label="Description" name="description" className="sm:col-span-2" rows={3} value={data.description ?? ''} onChange={(e) => setData('description', e.target.value)} error={errors.description} hint="Shown to visitors on public lead forms." />
                 </div>
             </Card>
-            <Card title="Branches" description="Branches where this campaign runs.">
-                <CheckboxList options={branches.map((b) => ({ value: b.id, label: b.name, hint: b.is_active ? null : 'Inactive' }))} value={data.branch_ids} onChange={(v) => setData('branch_ids', v)} error={errors.branch_ids} columns={3} />
+            <Card title="Admins" description="Admins who can own leads in this campaign. It also appears on their public lead form when public forms are enabled below.">
+                <CheckboxList options={userOptions(admins)} value={data.admin_ids} onChange={(v) => setData('admin_ids', v)} error={errors.admin_ids} emptyText="No admins exist yet." />
             </Card>
-            <Card title="Managers" description="Managers who work this campaign. Only managers belonging to a selected branch can be added. Branch Admin access is configured on each user.">
-                <CheckboxList options={managerOptions} value={data.manager_ids} onChange={(v) => setData('manager_ids', v)} error={errors.manager_ids} emptyText="No managers exist yet." />
+            <Card title="Managers" description="Managers who work this campaign's leads and can be chosen as advisors.">
+                <CheckboxList options={userOptions(managers)} value={data.manager_ids} onChange={(v) => setData('manager_ids', v)} error={errors.manager_ids} emptyText="No managers exist yet." />
             </Card>
             <Card title="Availability">
                 <div className="space-y-5">
                     <Toggle label="Active" description="Inactive campaigns cannot receive new leads. Existing leads remain accessible." checked={data.is_active} onChange={(v) => setData('is_active', v)} />
-                    <Toggle label="Available on public lead forms" description="Visitors can choose this campaign on the public form of any assigned branch." checked={data.is_public} onChange={(v) => setData('is_public', v)} />
+                    <Toggle label="Available on public lead forms" description="Visitors can choose this campaign on the public form of every admin assigned to it." checked={data.is_public} onChange={(v) => setData('is_public', v)} />
                     <Toggle label="Show statuses on public forms" description="Let visitors pick a lead and payment status. When off, the campaign defaults are used." checked={data.public_show_statuses} disabled={!data.is_public} onChange={(v) => setData('public_show_statuses', v)} />
                 </div>
             </Card>

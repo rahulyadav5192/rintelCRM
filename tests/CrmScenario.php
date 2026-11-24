@@ -3,36 +3,31 @@
 namespace Tests;
 
 use App\Enums\Permission;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\User;
 
 /**
- * Builds a small two-branch world used across authorization tests:
+ * Shared world for authorization tests:
  *
- *  Branch A: campaigns IVA + SOLAR       Branch B: campaign IVA
- *  - branchAdminA (IVA only)             - branchAdminB (IVA)
- *  - managerA (IVA)                      - managerB (IVA)
- *  - solarManagerA (SOLAR)
+ *  Campaigns: IVA, Solar
+ *  - adminA (IVA)  owns ivaLeadA          - adminB (IVA)  owns ivaLeadB
+ *  - managerA (IVA, status permission)    - managerB (IVA)
+ *  - solarManager (Solar)                 - solarLead: Solar, no owning admin
  */
 trait CrmScenario
 {
     protected User $super;
 
-    protected User $branchAdminA;
+    protected User $adminA;
 
-    protected User $branchAdminB;
+    protected User $adminB;
 
     protected User $managerA;
 
-    protected User $solarManagerA;
-
     protected User $managerB;
 
-    protected Branch $branchA;
-
-    protected Branch $branchB;
+    protected User $solarManager;
 
     protected Campaign $iva;
 
@@ -40,28 +35,26 @@ trait CrmScenario
 
     protected Lead $ivaLeadA;
 
-    protected Lead $solarLeadA;
-
     protected Lead $ivaLeadB;
+
+    protected Lead $solarLead;
 
     protected function buildScenario(): void
     {
-        $this->branchA = Branch::factory()->create(['name' => 'Branch A']);
-        $this->branchB = Branch::factory()->create(['name' => 'Branch B']);
-        $this->iva = Campaign::factory()->forBranches([$this->branchA, $this->branchB])->create(['name' => 'IVA']);
-        $this->solar = Campaign::factory()->forBranches([$this->branchA])->create(['name' => 'Solar']);
+        $this->iva = Campaign::factory()->create(['name' => 'IVA']);
+        $this->solar = Campaign::factory()->create(['name' => 'Solar']);
 
         $this->super = User::factory()->superAdmin()->create();
-        $this->branchAdminA = User::factory()->branchAdmin($this->branchA)->withCampaigns([$this->iva])
+        $this->adminA = User::factory()->admin()->withCampaigns([$this->iva])
             ->withPermissions([Permission::CreateLeads, Permission::EditLeads, Permission::AssignLeads, Permission::UpdateLeadStatus, Permission::UpdatePaymentStatus])->create();
-        $this->branchAdminB = User::factory()->branchAdmin($this->branchB)->withCampaigns([$this->iva])->withDefaultPermissions()->create();
-        $this->managerA = User::factory()->manager($this->branchA)->withCampaigns([$this->iva])->withPermissions([Permission::UpdateLeadStatus])->create();
-        $this->solarManagerA = User::factory()->manager($this->branchA)->withCampaigns([$this->solar])->withDefaultPermissions()->create();
-        $this->managerB = User::factory()->manager($this->branchB)->withCampaigns([$this->iva])->withDefaultPermissions()->create();
+        $this->adminB = User::factory()->admin()->withCampaigns([$this->iva])->withDefaultPermissions()->create();
+        $this->managerA = User::factory()->manager()->withCampaigns([$this->iva])->withPermissions([Permission::UpdateLeadStatus])->create();
+        $this->managerB = User::factory()->manager()->withCampaigns([$this->iva])->withDefaultPermissions()->create();
+        $this->solarManager = User::factory()->manager()->withCampaigns([$this->solar])->withDefaultPermissions()->create();
 
-        $this->ivaLeadA = Lead::factory()->for_($this->branchA, $this->iva, $this->managerA)->create();
-        $this->solarLeadA = Lead::factory()->for_($this->branchA, $this->solar, $this->solarManagerA)->create();
-        $this->ivaLeadB = Lead::factory()->for_($this->branchB, $this->iva, $this->managerB)->create();
+        $this->ivaLeadA = Lead::factory()->for_($this->iva, $this->adminA, $this->managerA)->create();
+        $this->ivaLeadB = Lead::factory()->for_($this->iva, $this->adminB, $this->managerB)->create();
+        $this->solarLead = Lead::factory()->for_($this->solar, null, $this->solarManager)->create();
     }
 
     protected function leadPayload(array $overrides = []): array
@@ -74,9 +67,17 @@ trait CrmScenario
             'email' => 'john@example.com',
             'house_number' => '12',
             'post_code' => 'SW1A 1AA',
-            'branch_id' => $this->branchA->id,
             'campaign_id' => $this->iva->id,
             'assigned_to' => $this->managerA->id,
+            ...$overrides,
+        ];
+    }
+
+    /** Current values of a lead, for update payloads that should only change specific fields. */
+    protected function currentPayload(Lead $lead, array $overrides = []): array
+    {
+        return [
+            ...$lead->only('title', 'first_name', 'last_name', 'mobile', 'email', 'house_number', 'post_code', 'campaign_id', 'assigned_to', 'admin_id', 'lead_status_id', 'payment_status_id'),
             ...$overrides,
         ];
     }
@@ -84,5 +85,10 @@ trait CrmScenario
     protected function listedLeadIds($response): array
     {
         return collect($response->viewData('page')['props']['leads']['data'])->pluck('id')->sort()->values()->all();
+    }
+
+    protected function ids(...$models): array
+    {
+        return collect($models)->pluck('id')->sort()->values()->all();
     }
 }

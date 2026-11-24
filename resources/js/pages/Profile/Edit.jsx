@@ -16,8 +16,7 @@ export default function Edit({ profile }) {
                 <Card title="Access" description="Managed by your administrator.">
                     <DetailList items={[
                         { label: 'Role', value: profile.role },
-                        { label: 'Branch', value: profile.branch ?? 'All branches' },
-                        { label: 'Campaigns', value: profile.campaigns.length ? profile.campaigns.join(', ') : profile.branch ? '—' : 'All campaigns', full: true },
+                        { label: 'Campaigns', value: profile.role === 'Super Admin' ? 'All campaigns' : profile.campaigns.join(', ') || '—' },
                     ]} />
                 </Card>
                 <form onSubmit={(e) => (e.preventDefault(), details.put('/profile', { preserveScroll: true }))}>

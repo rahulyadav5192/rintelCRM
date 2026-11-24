@@ -4,7 +4,6 @@ namespace Database\Factories;
 
 use App\Enums\Permission;
 use App\Enums\Role;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -32,7 +31,7 @@ class UserFactory extends Factory
 
     public function configure(): static
     {
-        // role/branch/is_active are not fillable, so apply them after making the model.
+        // role/is_active are not fillable, so apply them after making the model.
         return $this->afterMaking(function (User $user) {
             $user->role ??= Role::Manager;
             $user->is_active ??= true;
@@ -44,19 +43,15 @@ class UserFactory extends Factory
         return $this->afterMaking(fn (User $u) => $u->role = Role::SuperAdmin);
     }
 
-    public function branchAdmin(Branch $branch): static
+    public function admin(): static
     {
-        return $this->afterMaking(function (User $u) use ($branch) {
-            $u->role = Role::BranchAdmin;
-            $u->branch_id = $branch->id;
-        });
+        return $this->afterMaking(fn (User $u) => $u->role = Role::Admin);
     }
 
-    public function manager(Branch $branch, string $visibility = User::VISIBILITY_CAMPAIGN): static
+    public function manager(string $visibility = User::VISIBILITY_CAMPAIGN): static
     {
-        return $this->afterMaking(function (User $u) use ($branch, $visibility) {
+        return $this->afterMaking(function (User $u) use ($visibility) {
             $u->role = Role::Manager;
-            $u->branch_id = $branch->id;
             $u->lead_visibility = $visibility;
         });
     }

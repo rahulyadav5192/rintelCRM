@@ -24,7 +24,7 @@ export default function Index({ campaigns, filters: initial, canManage }) {
 
     return (
         <AppLayout title="Campaigns" breadcrumbs={[{ label: 'Campaigns' }]}>
-            <PageHeader title="Campaigns" description={canManage ? 'Create campaigns, assign them to branches and configure their statuses.' : 'Campaigns you have access to.'} actions={canManage && <Button href="/campaigns/create" icon={Plus}>New campaign</Button>} />
+            <PageHeader title="Campaigns" description={canManage ? 'Create campaigns, assign admins and managers, and configure statuses.' : 'Campaigns you have access to.'} actions={canManage && <Button href="/campaigns/create" icon={Plus}>New campaign</Button>} />
             <DataTable
                 loading={loading}
                 rows={campaigns.data}
@@ -40,7 +40,7 @@ export default function Index({ campaigns, filters: initial, canManage }) {
                 columns={[
                     { key: 'name', label: 'Campaign', render: (c) => <div><Link href={`/campaigns/${c.id}`} className="font-medium text-ink hover:text-primary-600">{c.name}</Link><p className="max-w-xs truncate text-xs text-muted">{c.description}</p></div> },
                     { key: 'code', label: 'Code', render: (c) => <span className="font-mono text-xs text-gray-600">{c.code}</span> },
-                    { key: 'branches', label: 'Branches', render: (c) => <span className="text-gray-600">{c.branches.join(', ') || '—'}</span> },
+                    ...(canManage ? [{ key: 'admins', label: 'Admins', render: (c) => <span className="block max-w-[220px] truncate text-gray-600" title={c.admins.join(', ')}>{c.admins.join(', ') || '—'}</span> }] : []),
                     { key: 'managers_count', label: 'Managers', render: (c) => formatNumber(c.managers_count) },
                     { key: 'leads_count', label: 'Leads', render: (c) => <Link href={`/leads?campaign_id=${c.id}`} className="text-primary-600 hover:underline">{formatNumber(c.leads_count)}</Link> },
                     { key: 'is_public', label: 'Public form', render: (c) => (c.is_public ? <StatusBadge color="sky">Enabled</StatusBadge> : <span className="text-muted">—</span>) },

@@ -29,6 +29,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('view-activity-logs', fn (User $user) => $user->isSuperAdmin());
         Gate::define('manage-public-forms', fn (User $user) => $user->isSuperAdmin());
         Gate::define('manage-settings', fn (User $user) => $user->isSuperAdmin());
+        Gate::define('manage-statuses', fn (User $user) => $user->isSuperAdmin());
 
         RateLimiter::for('public-leads', function (Request $request) {
             return [

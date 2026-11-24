@@ -5,7 +5,7 @@ import PageHeader from '@/components/PageHeader';
 import Button from '@/components/Button';
 import LeadForm from '@/components/LeadForm';
 
-export default function Edit({ lead, branches, titles, branchLocked, canSetDate, canAssign, currentUserId, abilities, currentOptions }) {
+export default function Edit({ lead, campaigns, titles, canChooseOwner, canSetDate, canAssign, currentUserId, abilities, currentOptions }) {
     const form = useForm({
         lead_date: lead.lead_date ?? '',
         title: lead.title ?? '',
@@ -15,7 +15,7 @@ export default function Edit({ lead, branches, titles, branchLocked, canSetDate,
         email: lead.email ?? '',
         house_number: lead.house_number ?? '',
         post_code: lead.post_code ?? '',
-        branch_id: lead.branch_id,
+        admin_id: lead.admin_id ?? '',
         campaign_id: lead.campaign_id,
         assigned_to: lead.assigned_to ?? '',
         lead_status_id: lead.lead_status_id ?? '',
@@ -41,7 +41,7 @@ export default function Edit({ lead, branches, titles, branchLocked, canSetDate,
                         You can update only the fields your permissions allow. Other fields are read-only.
                     </div>
                 )}
-                <LeadForm form={form} branches={branches} titles={titles} branchLocked={branchLocked} canSetDate={canSetDate} canAssign={canAssign} currentUserId={currentUserId} leadNumber={lead.lead_number} abilities={abilities} currentOptions={currentOptions} />
+                <LeadForm form={form} campaigns={campaigns} titles={titles} canChooseOwner={canChooseOwner} canSetDate={canSetDate} canAssign={canAssign} currentUserId={currentUserId} leadNumber={lead.lead_number} abilities={abilities} currentOptions={currentOptions} />
                 <div className="sticky bottom-0 mt-6 flex justify-end gap-2 border-t border-line bg-subtle/95 py-4 backdrop-blur">
                     <Button variant="secondary" href={`/leads/${lead.id}`}>
                         Cancel

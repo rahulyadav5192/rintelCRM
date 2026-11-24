@@ -25,11 +25,6 @@ class Campaign extends Model
         ];
     }
 
-    public function branches(): BelongsToMany
-    {
-        return $this->belongsToMany(Branch::class)->withTimestamps();
-    }
-
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withTimestamps();
@@ -38,6 +33,11 @@ class Campaign extends Model
     public function managers(): BelongsToMany
     {
         return $this->users()->where('role', Role::Manager->value);
+    }
+
+    public function admins(): BelongsToMany
+    {
+        return $this->users()->where('role', Role::Admin->value);
     }
 
     public function leadStatuses(): HasMany
@@ -70,18 +70,13 @@ class Campaign extends Model
         return $query->whereIn('campaigns.id', $user->campaignIds());
     }
 
-    public function scopeInBranch(Builder $query, int $branchId): Builder
-    {
-        return $query->whereHas('branches', fn (Builder $q) => $q->where('branches.id', $branchId));
-    }
-
     public function defaultLeadStatus(): ?CampaignLeadStatus
     {
-        return $this->leadStatuses()->where('is_active', true)->orderByDesc('is_default')->orderBy('sort_order')->first();
+        return $this->leadStatuses()->where('is_active', true)->reorder()->orderByDesc('is_default')->orderBy('sort_order')->orderBy('id')->first();
     }
 
     public function defaultPaymentStatus(): ?CampaignPaymentStatus
     {
-        return $this->paymentStatuses()->where('is_active', true)->orderByDesc('is_default')->orderBy('sort_order')->first();
+        return $this->paymentStatuses()->where('is_active', true)->reorder()->orderByDesc('is_default')->orderBy('sort_order')->orderBy('id')->first();
     }
 }

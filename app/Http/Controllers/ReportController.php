@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Role;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\CampaignLeadStatus;
 use App\Models\CampaignPaymentStatus;
@@ -21,7 +20,7 @@ use Symfony\Component\HttpFoundation\Response;
 class ReportController extends Controller
 {
     public const TYPES = [
-        'branch' => 'Branch-wise',
+        'admin' => 'Admin-wise',
         'campaign' => 'Campaign-wise',
         'manager' => 'Manager-wise',
         'status' => 'Lead status',
@@ -34,14 +33,14 @@ class ReportController extends Controller
         $this->authorize('view-reports');
         $user = $request->user();
         $type = array_key_exists($request->query('type'), self::TYPES) ? $request->query('type') : 'campaign';
-        if ($type === 'branch' && ! $user->isSuperAdmin()) {
+        if ($type === 'admin' && ! $user->isSuperAdmin()) {
             $type = 'campaign';
         }
-        $filters = array_intersect_key(LeadFilters::fromRequest($request), array_flip(['date_from', 'date_to', 'branch_id', 'campaign_id', 'assigned_to', 'lead_status_id', 'payment_status_id']));
+        $filters = array_intersect_key(LeadFilters::fromRequest($request), array_flip(['date_from', 'date_to', 'admin_id', 'campaign_id', 'assigned_to', 'lead_status_id', 'payment_status_id']));
         $stats = new LeadStats($user, $filters);
 
         $rows = match ($type) {
-            'branch' => $stats->byBranch(),
+            'admin' => $stats->byAdmin(),
             'campaign' => $stats->byCampaign(),
             'manager' => $stats->byManager(),
             'status' => $stats->byStatus(),
@@ -62,16 +61,16 @@ class ReportController extends Controller
 
         return Inertia::render('Reports/Index', [
             'type' => $type,
-            'types' => collect(self::TYPES)->when(! $user->isSuperAdmin(), fn ($c) => $c->except('branch'))->map(fn ($label, $key) => ['value' => $key, 'label' => $label])->values(),
+            'types' => collect(self::TYPES)->when(! $user->isSuperAdmin(), fn ($c) => $c->except('admin'))->map(fn ($label, $key) => ['value' => $key, 'label' => $label])->values(),
             'rows' => $rows,
             'total' => $total,
             'filters' => $filters,
             'canExport' => $user->can('export', Lead::class),
             'filterOptions' => [
-                'branches' => $user->isSuperAdmin() ? Branch::orderBy('name')->get(['id', 'name']) : [],
+                'admins' => $user->isSuperAdmin() ? User::where('role', Role::Admin->value)->orderBy('name')->get(['id', 'name']) : [],
                 'campaigns' => Campaign::query()->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name']),
                 'managers' => User::query()->where('role', Role::Manager->value)
-                    ->when(! $user->isSuperAdmin(), fn ($q) => $q->where('branch_id', $user->branch_id))->orderBy('name')->get(['id', 'name']),
+                    ->when(! $user->isSuperAdmin(), fn ($q) => $q->whereHas('campaigns', fn ($c) => $c->whereIn('campaigns.id', $campaignIds ?: [0])))->orderBy('name')->get(['id', 'name']),
                 'leadStatuses' => CampaignLeadStatus::query()->when($campaignIds !== null, fn ($q) => $q->whereIn('campaign_id', $campaignIds ?: [0]))->orderBy('sort_order')->get(['id', 'name', 'campaign_id']),
                 'paymentStatuses' => CampaignPaymentStatus::query()->when($campaignIds !== null, fn ($q) => $q->whereIn('campaign_id', $campaignIds ?: [0]))->orderBy('sort_order')->get(['id', 'name', 'campaign_id']),
             ],

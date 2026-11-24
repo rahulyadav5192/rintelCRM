@@ -6,7 +6,7 @@ import UserForm from './UserForm';
 
 export default function Edit({ user, ...props }) {
     const { auth } = usePage().props;
-    const form = useForm({ ...user, mobile: user.mobile ?? '', branch_id: user.branch_id ?? '', password: '', lead_visibility: user.lead_visibility ?? 'campaign' });
+    const form = useForm({ ...user, mobile: user.mobile ?? '', password: '', lead_visibility: user.lead_visibility ?? 'campaign' });
     return (
         <AppLayout title={`Edit ${user.name}`} breadcrumbs={[{ label: 'Users', href: '/users' }, { label: user.name, href: `/users/${user.id}` }, { label: 'Edit' }]}>
             <form onSubmit={(e) => (e.preventDefault(), form.put(`/users/${user.id}`))} className="mx-auto max-w-4xl">

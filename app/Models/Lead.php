@@ -16,7 +16,7 @@ class Lead extends Model
     public const TITLES = ['Mr', 'Mrs', 'Ms', 'Miss', 'Dr', 'Prof', 'Mx'];
 
     /**
-     * Only personal/contact fields are mass assignable. Lead number, branch, campaign, assignment,
+     * Only personal/contact fields are mass assignable. Lead number, owner, campaign, assignment,
      * statuses and audit columns are always set explicitly by LeadService after validation.
      */
     protected $fillable = ['lead_date', 'title', 'first_name', 'last_name', 'mobile', 'email', 'house_number', 'post_code', 'follow_up_date', 'notes'];
@@ -29,9 +29,10 @@ class Lead extends Model
         ];
     }
 
-    public function branch(): BelongsTo
+    /** The Admin who owns this lead (null = Super Admin only). */
+    public function admin(): BelongsTo
     {
-        return $this->belongsTo(Branch::class)->withTrashed();
+        return $this->belongsTo(User::class, 'admin_id')->withTrashed();
     }
 
     public function campaign(): BelongsTo
@@ -84,9 +85,10 @@ class Lead extends Model
      * export, dashboard, reports, notifications) must go through this scope.
      *
      *  - Super Admin: all leads.
-     *  - Branch Admin: leads of their branch in campaigns assigned to them.
-     *  - Manager: leads in campaigns assigned to them, and either all of their branch's leads
-     *    in those campaigns ("campaign" visibility) or only leads assigned to them ("assigned").
+     *  - Admin: leads they own (created by them or received through their public form) in
+     *    campaigns assigned to them.
+     *  - Manager: leads in campaigns assigned to them — all of them ("campaign" visibility)
+     *    or only those assigned to them ("assigned").
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
@@ -96,16 +98,14 @@ class Lead extends Model
 
         $query->whereIn('leads.campaign_id', $user->campaignIds() ?: [0]);
 
-        if ($user->isBranchAdmin()) {
-            return $query->where('leads.branch_id', $user->branch_id ?? 0);
+        if ($user->isAdmin()) {
+            return $query->where('leads.admin_id', $user->id);
         }
 
         if ($user->lead_visibility === User::VISIBILITY_ASSIGNED) {
             return $query->where('leads.assigned_to', $user->id);
         }
 
-        return $query->where(function (Builder $q) use ($user) {
-            $q->where('leads.branch_id', $user->branch_id ?? 0)->orWhere('leads.assigned_to', $user->id);
-        });
+        return $query;
     }
 }

@@ -7,6 +7,7 @@ use App\Models\Lead;
 use App\Models\PublicLeadForm;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\DB;
 use Tests\CrmScenario;
 use Tests\TestCase;
 
@@ -22,10 +23,8 @@ class PublicLeadFormTest extends TestCase
     {
         parent::setUp();
         $this->buildScenario();
-        $this->form = new PublicLeadForm(['is_active' => true]);
-        $this->form->branch_id = $this->branchA->id;
-        $this->token = $this->form->rotateToken();
-        $this->form->save();
+        $this->form = PublicLeadForm::ensureFor($this->adminA);
+        $this->token = $this->form->plainToken();
     }
 
     private function submission(array $overrides = []): array
@@ -47,37 +46,38 @@ class PublicLeadFormTest extends TestCase
 
     public function test_token_is_stored_hashed_not_in_plain_text(): void
     {
-        $row = \DB::table('public_lead_forms')->find($this->form->id);
+        $row = DB::table('public_lead_forms')->find($this->form->id);
         $this->assertSame(hash('sha256', $this->token), $row->token_hash);
         $this->assertStringNotContainsString($this->token, json_encode($row));
     }
 
-    public function test_public_form_renders_without_authentication(): void
+    public function test_public_form_renders_without_authentication_with_the_admins_campaigns(): void
     {
         $this->get("/public/leads/{$this->token}")->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Public/LeadForm')->where('available', true)->has('campaigns', 2));
+            ->assertInertia(fn ($page) => $page->component('Public/LeadForm')->where('available', true)->has('campaigns', 1)->where('campaigns.0.name', 'IVA'));
     }
 
-    public function test_public_form_automatically_assigns_the_correct_branch(): void
+    public function test_public_submission_is_owned_by_the_forms_admin(): void
     {
-        // A branch_id in the payload is ignored completely.
-        $this->post("/public/leads/{$this->token}", $this->submission(['branch_id' => $this->branchB->id]))->assertSessionHasNoErrors()->assertRedirect();
+        $this->post("/public/leads/{$this->token}", $this->submission(['admin_id' => $this->adminB->id]))->assertSessionHasNoErrors()->assertRedirect();
 
         $lead = Lead::where('first_name', 'Jane')->firstOrFail();
-        $this->assertSame($this->branchA->id, $lead->branch_id);
+        $this->assertSame($this->adminA->id, $lead->admin_id);
         $this->assertSame('public', $lead->source);
         $this->assertNull($lead->created_by);
         $this->assertSame($this->managerA->id, $lead->assigned_to);
-        $this->assertSame($this->form->id, $lead->public_lead_form_id);
         $this->assertSame(1, $this->form->fresh()->submissions_count);
+
+        // Visible to the owning admin only.
+        $this->actingAs($this->adminA)->get("/leads/{$lead->id}")->assertOk();
+        $this->actingAs($this->adminB)->get("/leads/{$lead->id}")->assertForbidden();
     }
 
-    public function test_public_form_validates_campaign_and_manager_belong_to_branch(): void
+    public function test_public_form_validates_campaign_and_manager(): void
     {
-        $other = Campaign::factory()->forBranches([$this->branchB])->create();
-        $this->post("/public/leads/{$this->token}", $this->submission(['campaign_id' => $other->id, 'assigned_to' => null]))->assertSessionHasErrors('campaign_id');
-        $this->post("/public/leads/{$this->token}", $this->submission(['assigned_to' => $this->managerB->id]))->assertSessionHasErrors('assigned_to');
-        $this->post("/public/leads/{$this->token}", $this->submission(['assigned_to' => $this->solarManagerA->id]))->assertSessionHasErrors('assigned_to');
+        // Solar is not assigned to adminA.
+        $this->post("/public/leads/{$this->token}", $this->submission(['campaign_id' => $this->solar->id, 'assigned_to' => null]))->assertSessionHasErrors('campaign_id');
+        $this->post("/public/leads/{$this->token}", $this->submission(['assigned_to' => $this->solarManager->id]))->assertSessionHasErrors('assigned_to');
         $this->post("/public/leads/{$this->token}", $this->submission(['mobile' => 'abc', 'email' => 'nope']))->assertSessionHasErrors(['mobile', 'email']);
         $this->assertSame(0, Lead::where('first_name', 'Jane')->count());
     }
@@ -103,25 +103,38 @@ class PublicLeadFormTest extends TestCase
         $this->post("/public/leads/{$newToken}", $this->submission())->assertSessionHasNoErrors();
         $this->assertDatabaseHas('activity_logs', ['action' => 'public_form.reset']);
 
-        // Deactivated URL.
         $this->form->update(['is_active' => false]);
         $this->post("/public/leads/{$newToken}", $this->submission())->assertNotFound();
     }
 
-    public function test_inactive_branches_and_campaigns_cannot_receive_public_submissions(): void
+    public function test_inactive_admins_and_campaigns_cannot_receive_public_submissions(): void
     {
+        $this->iva->is_public = false;
+        $this->iva->save();
+        $this->post("/public/leads/{$this->token}", $this->submission())->assertSessionHasErrors('campaign_id');
+
+        $this->iva->is_public = true;
         $this->iva->is_active = false;
         $this->iva->save();
         $this->post("/public/leads/{$this->token}", $this->submission())->assertSessionHasErrors('campaign_id');
 
-        $this->solar->is_public = false;
-        $this->solar->save();
-        $this->post("/public/leads/{$this->token}", $this->submission(['campaign_id' => $this->solar->id, 'assigned_to' => null]))->assertSessionHasErrors('campaign_id');
-
-        $this->branchA->is_active = false;
-        $this->branchA->save();
+        $this->iva->is_active = true;
+        $this->iva->save();
+        $this->adminA->is_active = false;
+        $this->adminA->save();
         $this->post("/public/leads/{$this->token}", $this->submission())->assertNotFound();
         $this->assertSame(0, Lead::where('first_name', 'Jane')->count());
+    }
+
+    public function test_only_super_admin_manages_public_urls_and_admins_see_only_their_own(): void
+    {
+        $this->actingAs($this->adminA)->post("/public-forms/{$this->form->id}/regenerate")->assertForbidden();
+        $this->actingAs($this->adminA)->patch("/public-forms/{$this->form->id}/toggle")->assertForbidden();
+
+        PublicLeadForm::ensureFor($this->adminB);
+        $this->actingAs($this->adminA)->get('/public-forms')->assertOk()
+            ->assertInertia(fn ($page) => $page->has('admins', 1)->where('admins.0.id', $this->adminA->id)->where('canManage', false));
+        $this->actingAs($this->super)->get('/public-forms')->assertOk()->assertInertia(fn ($page) => $page->has('admins', 2));
     }
 
     public function test_spam_protection_rejects_bots(): void
@@ -142,8 +155,11 @@ class PublicLeadFormTest extends TestCase
     public function test_public_options_expose_only_names_of_eligible_managers(): void
     {
         $this->getJson("/public/leads/{$this->token}/campaigns/{$this->iva->id}")->assertOk()
-            ->assertExactJson(['managers' => [['id' => $this->managerA->id, 'name' => $this->managerA->name]], 'lead_statuses' => [], 'payment_statuses' => []]);
-        $other = Campaign::factory()->forBranches([$this->branchB])->create();
+            ->assertJsonCount(2, 'managers')
+            ->assertJsonStructure(['managers' => [['id', 'name']]])
+            ->assertJsonMissingPath('managers.0.email');
+        $this->getJson("/public/leads/{$this->token}/campaigns/{$this->solar->id}")->assertNotFound();
+        $other = Campaign::factory()->create();
         $this->getJson("/public/leads/{$this->token}/campaigns/{$other->id}")->assertNotFound();
     }
 }

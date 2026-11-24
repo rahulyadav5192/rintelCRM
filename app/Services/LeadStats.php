@@ -28,12 +28,12 @@ class LeadStats
             ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'total' => (int) $r->total])->all();
     }
 
-    public function byBranch(): array
+    public function byAdmin(): array
     {
-        return $this->base()->join('branches', 'branches.id', '=', 'leads.branch_id')
-            ->groupBy('branches.id', 'branches.name')->orderByDesc('total')
-            ->get(['branches.id', 'branches.name', DB::raw('count(*) as total')])
-            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name, 'total' => (int) $r->total])->all();
+        return $this->base()->leftJoin('users as owner', 'owner.id', '=', 'leads.admin_id')
+            ->groupBy('owner.id', 'owner.name')->orderByDesc('total')
+            ->get(['owner.id', 'owner.name', DB::raw('count(*) as total')])
+            ->map(fn ($r) => ['id' => $r->id, 'name' => $r->name ?? 'No admin', 'total' => (int) $r->total])->all();
     }
 
     public function byManager(): array

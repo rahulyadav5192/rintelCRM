@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\BranchController;
 use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\CampaignStatusController;
 use App\Http\Controllers\DashboardController;
@@ -16,6 +15,7 @@ use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\PublicLeadFormController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\StatusManagementController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -45,12 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::post('leads/{lead}/notes', [LeadNoteController::class, 'store'])->name('leads.notes.store');
 
     // Dynamic form options (JSON, authorization-scoped)
-    Route::get('lookup/branches/{branch}/campaigns', [LookupController::class, 'branchCampaigns'])->name('lookup.branch-campaigns');
-    Route::get('lookup/branches/{branch}/campaigns/{campaign}', [LookupController::class, 'campaignOptions'])->name('lookup.campaign-options');
-
-    // Branches (Super Admin)
-    Route::patch('branches/{branch}/toggle', [BranchController::class, 'toggle'])->name('branches.toggle');
-    Route::resource('branches', BranchController::class)->except('destroy');
+    Route::get('lookup/campaigns/{campaign}', [LookupController::class, 'campaignOptions'])->name('lookup.campaign-options');
 
     // Campaigns
     Route::patch('campaigns/{campaign}/toggle', [CampaignController::class, 'toggle'])->name('campaigns.toggle');
@@ -60,14 +55,19 @@ Route::middleware('auth')->group(function () {
     Route::put('campaigns/{campaign}/statuses/{type}/{status}', [CampaignStatusController::class, 'update'])->whereIn('type', ['lead', 'payment'])->name('campaigns.statuses.update');
     Route::post('campaigns/{campaign}/statuses/{type}/reorder', [CampaignStatusController::class, 'reorder'])->whereIn('type', ['lead', 'payment'])->name('campaigns.statuses.reorder');
 
+    // Status management across campaigns (Super Admin)
+    Route::get('statuses', [StatusManagementController::class, 'index'])->name('statuses.index');
+    Route::post('statuses', [StatusManagementController::class, 'store'])->name('statuses.store');
+    Route::put('statuses', [StatusManagementController::class, 'update'])->name('statuses.update');
+
     // Users
     Route::patch('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle');
     Route::put('users/{user}/password', [UserController::class, 'resetPassword'])->name('users.password');
     Route::resource('users', UserController::class)->except('destroy');
 
-    // Public lead forms (Super Admin)
+    // Public lead forms: one per Admin (managed by Super Admin; Admins can view their own)
     Route::get('public-forms', [PublicLeadFormController::class, 'index'])->name('public-forms.index');
-    Route::post('public-forms/{branch}', [PublicLeadFormController::class, 'store'])->name('public-forms.store');
+    Route::post('public-forms/admins/{admin}', [PublicLeadFormController::class, 'store'])->name('public-forms.store');
     Route::post('public-forms/{publicForm}/regenerate', [PublicLeadFormController::class, 'regenerate'])->name('public-forms.regenerate');
     Route::patch('public-forms/{publicForm}/toggle', [PublicLeadFormController::class, 'toggle'])->name('public-forms.toggle');
 

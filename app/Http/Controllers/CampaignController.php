@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Enums\Role;
 use App\Http\Requests\CampaignRequest;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\User;
@@ -33,16 +32,16 @@ class CampaignController extends Controller
             ->withCount([
                 'leads' => fn ($q) => $q->visibleTo($user),
                 'managers',
-                'branches',
+                'admins',
             ])
-            ->with('branches:id,name')
+            ->with('admins:id,name')
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w->where('name', 'like', "%{$search}%")->orWhere('code', 'like', "%{$search}%")))
             ->when(in_array($status, ['active', 'inactive'], true), fn ($q) => $q->where('is_active', $status === 'active'))
             ->orderBy('name')
             ->paginate(15)->withQueryString()
             ->through(fn (Campaign $c) => [
-                ...$c->only('id', 'name', 'code', 'description', 'is_active', 'is_public', 'leads_count', 'managers_count', 'branches_count'),
-                'branches' => $c->branches->pluck('name'),
+                ...$c->only('id', 'name', 'code', 'description', 'is_active', 'is_public', 'leads_count', 'managers_count', 'admins_count'),
+                'admins' => $user->isSuperAdmin() ? $c->admins->pluck('name') : [],
             ]);
 
         return Inertia::render('Campaigns/Index', [
@@ -68,8 +67,8 @@ class CampaignController extends Controller
             $campaign = new Campaign($data);
             $campaign->is_active = $data['is_active'] ?? true;
             $campaign->save();
-            $campaign->branches()->sync($data['branch_ids'] ?? []);
-            $this->syncManagers($campaign, $data['manager_ids'] ?? []);
+            $this->syncRoleUsers($campaign, Role::Admin, $data['admin_ids'] ?? []);
+            $this->syncRoleUsers($campaign, Role::Manager, $data['manager_ids'] ?? []);
             foreach (self::DEFAULT_LEAD_STATUSES as $i => [$name, $color]) {
                 $campaign->leadStatuses()->create(['name' => $name, 'color' => $color, 'sort_order' => $i + 1, 'is_default' => $i === 0]);
             }
@@ -89,11 +88,12 @@ class CampaignController extends Controller
     {
         $this->authorize('view', $campaign);
         $user = $request->user();
-        $campaign->load(['branches:id,name,is_active', 'leadStatuses', 'paymentStatuses']);
+        $campaign->load(['leadStatuses', 'paymentStatuses']);
 
-        $usersQuery = $campaign->users()->with('branch:id,name')->orderBy('name');
+        // Admins only see the managers working the campaign (plus themselves), not other admins.
+        $usersQuery = $campaign->users()->orderBy('role')->orderBy('name');
         if (! $user->isSuperAdmin()) {
-            $usersQuery->where('users.branch_id', $user->branch_id);
+            $usersQuery->where(fn ($q) => $q->where('users.role', Role::Manager->value)->orWhere('users.id', $user->id));
         }
 
         $leadBase = fn () => Lead::query()->visibleTo($user)->where('leads.campaign_id', $campaign->id);
@@ -103,13 +103,12 @@ class CampaignController extends Controller
             'campaign' => [
                 ...$campaign->only('id', 'name', 'code', 'description', 'is_active', 'is_public', 'public_show_statuses'),
                 'created_at' => $campaign->created_at?->toIso8601String(),
-                'branches' => $campaign->branches->when(! $user->isSuperAdmin(), fn ($c) => $c->where('id', $user->branch_id))->values()->map->only('id', 'name', 'is_active'),
                 'lead_statuses' => $campaign->leadStatuses->map(fn ($s) => [...$s->only('id', 'name', 'color', 'is_active', 'is_default'), 'leads_count' => (int) ($statusCounts[$s->id] ?? 0)]),
                 'payment_statuses' => $campaign->paymentStatuses->map->only('id', 'name', 'color', 'is_active', 'is_default'),
                 'leads_count' => $leadBase()->count(),
             ],
             'users' => $usersQuery->get()->map(fn ($u) => [
-                'id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role->label(), 'branch' => $u->branch?->name, 'is_active' => $u->is_active,
+                'id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role->label(), 'is_active' => $u->is_active,
             ]),
             'canManage' => $user->can('update', $campaign),
         ]);
@@ -123,7 +122,7 @@ class CampaignController extends Controller
             ...$this->formOptions(),
             'campaign' => [
                 ...$campaign->only('id', 'name', 'code', 'description', 'is_active', 'is_public', 'public_show_statuses'),
-                'branch_ids' => $campaign->branches()->pluck('branches.id'),
+                'admin_ids' => $campaign->admins()->pluck('users.id'),
                 'manager_ids' => $campaign->managers()->pluck('users.id'),
             ],
         ]);
@@ -134,17 +133,17 @@ class CampaignController extends Controller
         $this->authorize('update', $campaign);
         $data = $request->validated();
         $fields = ['name', 'code', 'description', 'is_active', 'is_public', 'public_show_statuses'];
-        $before = [...$campaign->only($fields), 'branch_ids' => $campaign->branches()->pluck('branches.id')->sort()->values()->all(), 'manager_ids' => $campaign->managers()->pluck('users.id')->sort()->values()->all()];
+        $before = [...$campaign->only($fields), 'admin_ids' => $campaign->admins()->pluck('users.id')->sort()->values()->all(), 'manager_ids' => $campaign->managers()->pluck('users.id')->sort()->values()->all()];
 
         DB::transaction(function () use ($campaign, $data) {
             $campaign->fill($data);
             $campaign->is_active = $data['is_active'] ?? $campaign->is_active;
             $campaign->save();
-            $campaign->branches()->sync($data['branch_ids'] ?? []);
-            $this->syncManagers($campaign, $data['manager_ids'] ?? []);
+            $this->syncRoleUsers($campaign, Role::Admin, $data['admin_ids'] ?? []);
+            $this->syncRoleUsers($campaign, Role::Manager, $data['manager_ids'] ?? []);
         });
 
-        $after = [...$campaign->only($fields), 'branch_ids' => $campaign->branches()->pluck('branches.id')->sort()->values()->all(), 'manager_ids' => $campaign->managers()->pluck('users.id')->sort()->values()->all()];
+        $after = [...$campaign->only($fields), 'admin_ids' => $campaign->admins()->pluck('users.id')->sort()->values()->all(), 'manager_ids' => $campaign->managers()->pluck('users.id')->sort()->values()->all()];
         [$old, $new] = ActivityLogger::diff($before, $after);
         if ($new) {
             ActivityLogger::log('campaigns', 'campaign.updated', "Campaign {$campaign->name} updated", $campaign->id, $old, $new);
@@ -164,21 +163,20 @@ class CampaignController extends Controller
         return back()->with('success', "Campaign {$state}.");
     }
 
-    /** Only the manager links are synced here; Branch Admin campaign access is managed on the user. */
-    private function syncManagers(Campaign $campaign, array $managerIds): void
+    /** Syncs the campaign's users of one role (admins or managers), leaving the other role untouched. */
+    private function syncRoleUsers(Campaign $campaign, Role $role, array $ids): void
     {
-        $managerIds = User::query()->where('role', Role::Manager->value)->whereIn('id', $managerIds)->pluck('id')->all();
-        $current = $campaign->managers()->pluck('users.id')->all();
-        $campaign->users()->detach(array_diff($current, $managerIds));
-        $campaign->users()->syncWithoutDetaching($managerIds);
+        $ids = User::query()->where('role', $role->value)->whereIn('id', $ids)->pluck('id')->all();
+        $current = $campaign->users()->where('role', $role->value)->pluck('users.id')->all();
+        $campaign->users()->detach(array_diff($current, $ids));
+        $campaign->users()->syncWithoutDetaching($ids);
     }
 
     private function formOptions(): array
     {
         return [
-            'branches' => Branch::query()->orderBy('name')->get(['id', 'name', 'is_active']),
-            'managers' => User::query()->where('role', Role::Manager->value)->with('branch:id,name')->orderBy('name')->get(['id', 'name', 'branch_id', 'is_active'])
-                ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'branch_id' => $u->branch_id, 'branch' => $u->branch?->name, 'is_active' => $u->is_active]),
+            'admins' => User::query()->where('role', Role::Admin->value)->orderBy('name')->get(['id', 'name', 'email', 'is_active']),
+            'managers' => User::query()->where('role', Role::Manager->value)->orderBy('name')->get(['id', 'name', 'email', 'is_active']),
         ];
     }
 }

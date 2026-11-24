@@ -13,13 +13,12 @@ class ProfileController extends Controller
 {
     public function edit(Request $request): Response
     {
-        $user = $request->user()->load(['branch:id,name', 'campaigns:id,name']);
+        $user = $request->user()->load(['campaigns:id,name']);
 
         return Inertia::render('Profile/Edit', [
             'profile' => [
                 ...$user->only('name', 'email', 'mobile'),
                 'role' => $user->role->label(),
-                'branch' => $user->branch?->name,
                 'campaigns' => $user->campaigns->pluck('name'),
             ],
         ]);

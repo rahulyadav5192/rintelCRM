@@ -116,7 +116,7 @@ export default function Show({ lead, can }) {
                     <Card title="Assignment">
                         <DetailList
                             items={[
-                                { label: 'Branch', value: lead.branch, full: true },
+                                { label: 'Admin (owner)', value: lead.admin ?? <span className="text-muted italic">No admin</span>, full: true },
                                 { label: 'Campaign', value: lead.campaign?.name, full: true },
                                 { label: 'Advisor', value: lead.assignee ? lead.assignee.name : <span className="text-muted italic">Unassigned</span>, full: true },
                                 { label: 'Follow-up date', value: lead.follow_up_date ? formatDate(lead.follow_up_date) : null, full: true },

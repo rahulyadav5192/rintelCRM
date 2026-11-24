@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\PublicLeadForm;
 use App\Models\Setting;
@@ -17,8 +16,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Unauthenticated lead capture. The branch comes exclusively from the URL token; any branch_id
- * in the payload is ignored. Only id + name of eligible advisors is ever exposed.
+ * Unauthenticated lead capture. The owning Admin comes exclusively from the URL token; any
+ * admin_id in the payload is ignored. Only id + name of eligible advisors is ever exposed.
  */
 class PublicLeadController extends Controller
 {
@@ -29,11 +28,10 @@ class PublicLeadController extends Controller
     public function show(string $token): Response
     {
         $form = $this->resolve($token);
-        $available = $form && $form->branch->is_active;
+        $available = (bool) $form;
 
         return Inertia::render('Public/LeadForm', [
             'available' => $available,
-            'branch' => $available ? ['name' => $form->branch->name] : null,
             'campaigns' => $available ? $this->campaigns($form)->map(fn ($c) => [
                 'id' => $c->id, 'name' => $c->name, 'description' => $c->description, 'show_statuses' => $c->public_show_statuses,
             ]) : [],
@@ -51,12 +49,12 @@ class PublicLeadController extends Controller
     public function options(string $token, int $campaign): JsonResponse
     {
         $form = $this->resolve($token);
-        abort_unless($form && $form->branch->is_active, 404);
+        abort_unless($form, 404);
         $model = $this->campaigns($form)->firstWhere('id', $campaign);
         abort_unless($model, 404);
 
         return response()->json([
-            'managers' => $this->leads->eligibleManagers($form->branch_id, $model->id)->map->only('id', 'name'),
+            'managers' => $this->leads->eligibleManagers($model->id)->map->only('id', 'name'),
             ...($model->public_show_statuses ? $this->leads->statusOptions($model) : ['lead_statuses' => [], 'payment_statuses' => []]),
         ]);
     }
@@ -64,7 +62,7 @@ class PublicLeadController extends Controller
     public function store(Request $request, string $token): RedirectResponse
     {
         $form = $this->resolve($token);
-        abort_unless($form && $form->branch->is_active, 404);
+        abort_unless($form, 404);
 
         // Spam protection: honeypot field must stay empty and the form must not be submitted instantly.
         if (filled($request->input('website')) || ! $this->formTimingOk((string) $request->input('form_token'))) {
@@ -106,9 +104,10 @@ class PublicLeadController extends Controller
         return PublicLeadForm::findActiveByToken($token);
     }
 
+    /** The owning Admin's active campaigns that are enabled for public forms. */
     private function campaigns(PublicLeadForm $form)
     {
-        return Campaign::query()->active()->where('is_public', true)->inBranch($form->branch_id)
+        return $form->admin->campaigns()->active()->where('is_public', true)
             ->orderBy('name')->get(['campaigns.id', 'campaigns.name', 'campaigns.description', 'campaigns.public_show_statuses']);
     }
 

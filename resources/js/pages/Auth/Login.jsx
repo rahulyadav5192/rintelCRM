@@ -40,9 +40,9 @@ export default function Login() {
             <div className="hidden border-l border-line bg-subtle lg:flex lg:flex-col lg:justify-center lg:px-16">
                 <div className="max-w-md">
                     <p className="text-sm font-medium text-primary-600">Lead management</p>
-                    <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">Every branch, campaign and lead — in one place.</h2>
+                    <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">Every campaign and lead — in one place.</h2>
                     <ul className="mt-8 space-y-4 text-sm text-gray-600">
-                        {['Campaign-specific statuses and payment tracking', 'Branch-scoped access for admins and managers', 'Secure public lead forms for every branch', 'Full audit trail of every change'].map((t) => (
+                        {['Campaign-specific statuses and payment tracking', 'Admins see only their own leads; managers work their campaigns', 'A secure public lead form for every admin', 'Full audit trail of every change'].map((t) => (
                             <li key={t} className="flex items-start gap-3">
                                 <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />
                                 {t}

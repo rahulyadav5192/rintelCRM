@@ -26,8 +26,8 @@ class CampaignRequest extends FormRequest
             'is_active' => ['boolean'],
             'is_public' => ['boolean'],
             'public_show_statuses' => ['boolean'],
-            'branch_ids' => ['array'],
-            'branch_ids.*' => ['integer', 'exists:branches,id'],
+            'admin_ids' => ['array'],
+            'admin_ids.*' => ['integer', 'exists:users,id'],
             'manager_ids' => ['array'],
             'manager_ids.*' => ['integer', 'exists:users,id'],
         ];

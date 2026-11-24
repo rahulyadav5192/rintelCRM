@@ -23,7 +23,7 @@ class LeadExportController extends Controller
         $format = $request->query('format') === 'xlsx' ? 'xlsx' : 'csv';
 
         $query = LeadFilters::applySort(LeadFilters::query($user, $filters), $filters)
-            ->with(['branch:id,name', 'campaign:id,name', 'assignee:id,name', 'creator:id,name', 'leadStatus:id,name', 'paymentStatus:id,name']);
+            ->with(['admin:id,name', 'campaign:id,name', 'assignee:id,name', 'creator:id,name', 'leadStatus:id,name', 'paymentStatus:id,name']);
 
         $count = (clone $query)->count();
         ActivityLogger::log('exports', 'leads.exported', "Exported {$count} leads as ".strtoupper($format), null, null, ['filters' => $filters, 'count' => $count, 'format' => $format]);
@@ -33,7 +33,7 @@ class LeadExportController extends Controller
                 yield [
                     $lead->lead_number, $lead->lead_date?->format('Y-m-d'), $lead->title, $lead->first_name, $lead->last_name,
                     $lead->mobile, $lead->email, $lead->house_number, $lead->post_code,
-                    $lead->branch?->name, $lead->campaign?->name, $lead->assignee?->name,
+                    $lead->admin?->name, $lead->campaign?->name, $lead->assignee?->name,
                     $lead->leadStatus?->name, $lead->paymentStatus?->name, $lead->follow_up_date?->format('Y-m-d'),
                     $lead->source, $lead->creator?->name, $lead->created_at?->format('Y-m-d H:i'), $lead->notes,
                 ];
@@ -42,7 +42,7 @@ class LeadExportController extends Controller
 
         return SpreadsheetExporter::download($format, 'leads', [
             'Lead ID', 'Date', 'Title', 'First Name', 'Last Name', 'Mobile', 'Email', 'House Number', 'Post Code',
-            'Branch', 'Campaign', 'Advisor', 'Lead Status', 'Payment Status', 'Follow-up Date', 'Source', 'Created By', 'Created At', 'Notes',
+            'Admin', 'Campaign', 'Advisor', 'Lead Status', 'Payment Status', 'Follow-up Date', 'Source', 'Created By', 'Created At', 'Notes',
         ], $rows);
     }
 }

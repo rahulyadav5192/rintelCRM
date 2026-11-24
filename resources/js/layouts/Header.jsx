@@ -44,7 +44,7 @@ export default function Header({ title, breadcrumbs = [], onOpenMobile }) {
                             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">{initials(user.name)}</span>
                             <span className="hidden text-left leading-tight md:block">
                                 <span className="block text-sm font-medium text-ink">{user.name}</span>
-                                <span className="block text-xs text-muted">{user.role_label}{user.branch ? ` · ${user.branch.name}` : ''}</span>
+                                <span className="block text-xs text-muted">{user.role_label}</span>
                             </span>
                             <ChevronDown className={`hidden h-4 w-4 text-muted transition-transform md:block ${open ? 'rotate-180' : ''}`} />
                         </button>

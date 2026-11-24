@@ -9,14 +9,14 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-// Role, branch, status and permissions are deliberately NOT mass assignable; they are set explicitly
+// Role, status and permissions are deliberately NOT mass assignable; they are set explicitly
 // by UserController after authorization checks.
 #[Fillable(['name', 'email', 'mobile', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -46,11 +46,6 @@ class User extends Authenticatable
 
     // ---- Relationships -------------------------------------------------
 
-    public function branch(): BelongsTo
-    {
-        return $this->belongsTo(Branch::class);
-    }
-
     public function campaigns(): BelongsToMany
     {
         return $this->belongsToMany(Campaign::class)->withTimestamps();
@@ -71,6 +66,17 @@ class User extends Authenticatable
         return $this->hasMany(Lead::class, 'created_by');
     }
 
+    /** Leads owned by this Admin. */
+    public function ownedLeads(): HasMany
+    {
+        return $this->hasMany(Lead::class, 'admin_id');
+    }
+
+    public function publicForm(): HasOne
+    {
+        return $this->hasOne(PublicLeadForm::class);
+    }
+
     // ---- Role helpers ----------------------------------------------------
 
     public function isSuperAdmin(): bool
@@ -78,9 +84,9 @@ class User extends Authenticatable
         return $this->role === Role::SuperAdmin;
     }
 
-    public function isBranchAdmin(): bool
+    public function isAdmin(): bool
     {
-        return $this->role === Role::BranchAdmin;
+        return $this->role === Role::Admin;
     }
 
     public function isManager(): bool
@@ -147,11 +153,6 @@ class User extends Authenticatable
         return $this->isSuperAdmin() || in_array($campaignId, $this->campaignIds(), true);
     }
 
-    public function canAccessBranch(int $branchId): bool
-    {
-        return $this->isSuperAdmin() || (int) $this->branch_id === $branchId;
-    }
-
     // ---- Scopes ----------------------------------------------------------
 
     public function scopeActive(Builder $query): Builder
@@ -159,31 +160,19 @@ class User extends Authenticatable
         return $query->where('is_active', true);
     }
 
-    /**
-     * Active managers that can be assigned leads for a branch + campaign combination.
-     */
-    public function scopeEligibleManagers(Builder $query, int $branchId, int $campaignId): Builder
+    /** Active managers that can be assigned leads in a campaign. Managers are not tied to any admin. */
+    public function scopeEligibleManagers(Builder $query, int $campaignId): Builder
     {
         return $query->where('role', Role::Manager->value)
             ->where('is_active', true)
-            ->where('branch_id', $branchId)
-            ->whereHas('campaigns', fn (Builder $q) => $q->where('campaigns.id', $campaignId))
-            ->whereHas('branch', fn (Builder $q) => $q->whereHas('campaigns', fn (Builder $c) => $c->where('campaigns.id', $campaignId)));
+            ->whereHas('campaigns', fn (Builder $q) => $q->where('campaigns.id', $campaignId));
     }
 
-    /**
-     * Users the given actor may see in user management.
-     * Super Admin: everyone. Branch Admin (with manage_users): managers of their branch.
-     */
-    public function scopeManageableBy(Builder $query, User $actor): Builder
+    /** Active Admins that can own leads in a campaign (the campaign must be assigned to them). */
+    public function scopeEligibleAdmins(Builder $query, int $campaignId): Builder
     {
-        if ($actor->isSuperAdmin()) {
-            return $query;
-        }
-        if ($actor->isBranchAdmin() && $actor->hasPermission(Permission::ManageUsers)) {
-            return $query->where('role', Role::Manager->value)->where('branch_id', $actor->branch_id);
-        }
-
-        return $query->whereRaw('1 = 0');
+        return $query->where('role', Role::Admin->value)
+            ->where('is_active', true)
+            ->whereHas('campaigns', fn (Builder $q) => $q->where('campaigns.id', $campaignId));
     }
 }

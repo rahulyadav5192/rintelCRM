@@ -12,7 +12,7 @@ import Button from '@/components/Button';
 import useFilters from '@/lib/useFilters';
 import { formatDateTime } from '@/lib/utils';
 
-const MODULE_COLORS = { leads: 'blue', users: 'violet', branches: 'emerald', campaigns: 'amber', public_forms: 'sky', exports: 'orange', settings: 'gray' };
+const MODULE_COLORS = { leads: 'blue', users: 'violet', campaigns: 'amber', public_forms: 'sky', exports: 'orange', settings: 'gray' };
 
 function Values({ title, values }) {
     if (!values || !Object.keys(values).length) return null;

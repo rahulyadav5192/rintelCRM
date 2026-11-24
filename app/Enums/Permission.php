@@ -15,7 +15,6 @@ enum Permission: string
     case DeleteLeads = 'delete_leads';
     case ExportLeads = 'export_leads';
     case ViewReports = 'view_reports';
-    case ManageUsers = 'manage_users';
 
     public function label(): string
     {
@@ -28,7 +27,6 @@ enum Permission: string
             self::DeleteLeads => 'Delete leads',
             self::ExportLeads => 'Export leads',
             self::ViewReports => 'View reports',
-            self::ManageUsers => 'Manage branch managers',
         };
     }
 
@@ -43,7 +41,6 @@ enum Permission: string
             self::DeleteLeads => 'Permanently remove leads from listings.',
             self::ExportLeads => 'Download accessible leads as CSV / Excel.',
             self::ViewReports => 'Open the reports module for accessible data.',
-            self::ManageUsers => 'Create and edit managers in their own branch (Branch Admin only).',
         };
     }
 
@@ -52,8 +49,7 @@ enum Permission: string
     {
         return match ($role) {
             Role::SuperAdmin => [],
-            Role::BranchAdmin => self::cases(),
-            Role::Manager => array_values(array_filter(self::cases(), fn ($p) => $p !== self::ManageUsers)),
+            Role::Admin, Role::Manager => self::cases(),
         };
     }
 
@@ -61,7 +57,7 @@ enum Permission: string
     {
         return match ($role) {
             Role::SuperAdmin => [],
-            Role::BranchAdmin => [self::CreateLeads, self::EditLeads, self::AssignLeads, self::UpdateLeadStatus, self::UpdatePaymentStatus, self::ViewReports],
+            Role::Admin => [self::CreateLeads, self::EditLeads, self::AssignLeads, self::UpdateLeadStatus, self::UpdatePaymentStatus, self::ViewReports],
             Role::Manager => [self::UpdateLeadStatus, self::UpdatePaymentStatus],
         };
     }

@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Activity, Building2, CalendarClock, CalendarDays, CalendarRange, Megaphone, Plus, UserCheck, UserRoundX, Users, UsersRound, AlertCircle } from 'lucide-react';
+import { Activity, CalendarClock, ShieldCheck, CalendarDays, CalendarRange, Megaphone, Plus, UserCheck, UserRoundX, Users, UsersRound, AlertCircle } from 'lucide-react';
 import AppLayout from '@/layouts/AppLayout';
 import PageHeader from '@/components/PageHeader';
 import Card from '@/components/Card';
@@ -16,17 +16,17 @@ export default function Dashboard({ role, cards, charts, recentActivity, followU
     const { filters, set, reset, loading, activeCount } = useFilters('/dashboard', initial);
     const isSuper = role === 'super_admin';
     const isManager = role === 'manager';
-    const leadsUrl = (extra = {}) => withQuery('/leads', { campaign_id: filters.campaign_id, branch_id: filters.branch_id, date_from: filters.date_from, date_to: filters.date_to, ...extra });
+    const leadsUrl = (extra = {}) => withQuery('/leads', { campaign_id: filters.campaign_id, admin_id: filters.admin_id, date_from: filters.date_from, date_to: filters.date_to, ...extra });
     const today = new Date().toISOString().slice(0, 10);
     const monthStart = today.slice(0, 8) + '01';
 
     const statCards = [
-        { label: isSuper ? 'Total leads' : isManager ? 'Accessible leads' : 'Total branch leads', value: cards.total, icon: UsersRound, href: leadsUrl() },
+        { label: isSuper ? 'Total leads' : isManager ? 'Accessible leads' : 'My leads', value: cards.total, icon: UsersRound, href: leadsUrl() },
         { label: 'Leads today', value: cards.today, icon: CalendarDays, href: leadsUrl({ date_from: today, date_to: today }) },
         { label: 'Leads this month', value: cards.month, icon: CalendarRange, href: leadsUrl({ date_from: monthStart, date_to: today }) },
         ...(isSuper
             ? [
-                  { label: 'Branches', value: cards.branches, icon: Building2, hint: `${cards.active_branches} active`, href: '/branches' },
+                  { label: 'Admins', value: cards.admins, icon: ShieldCheck, hint: `${cards.active_admins} active`, href: '/users?role=admin' },
                   { label: 'Campaigns', value: cards.campaigns, icon: Megaphone, hint: `${cards.active_campaigns} active`, href: '/campaigns' },
                   { label: 'Users', value: cards.users, icon: Users, hint: `${cards.active_managers} active managers`, href: '/users' },
               ]
@@ -45,7 +45,7 @@ export default function Dashboard({ role, cards, charts, recentActivity, followU
         <AppLayout title="Dashboard">
             <PageHeader
                 title={`Welcome back, ${auth.user.name.split(' ')[0]}`}
-                description={isSuper ? 'Overview of lead activity across all branches and campaigns.' : isManager ? 'Your campaigns and assigned leads at a glance.' : `Lead activity for ${auth.user.branch?.name ?? 'your branch'}.`}
+                description={isSuper ? 'Overview of lead activity across all admins and campaigns.' : isManager ? 'Your campaigns and assigned leads at a glance.' : 'Leads you own across your campaigns.'}
                 actions={
                     auth.can.createLeads && (
                         <Button href="/leads/create" icon={Plus}>
@@ -59,7 +59,7 @@ export default function Dashboard({ role, cards, charts, recentActivity, followU
                 <input type="date" aria-label="From date" title="From date" value={filters.date_from ?? ''} max={filters.date_to || today} onChange={(e) => set('date_from', e.target.value)} className="input h-9 w-auto" />
                 <span className="text-sm text-muted">to</span>
                 <input type="date" aria-label="To date" title="To date" value={filters.date_to ?? ''} min={filters.date_from || undefined} max={today} onChange={(e) => set('date_to', e.target.value)} className="input h-9 w-auto" />
-                {isSuper && <FilterDropdown className="w-44" label="Branches" value={filters.branch_id} onChange={(v) => set('branch_id', v)} options={filterOptions.branches.map((b) => ({ value: b.id, label: b.name }))} />}
+                {isSuper && <FilterDropdown className="w-44" label="Admins" value={filters.admin_id} onChange={(v) => set('admin_id', v)} options={filterOptions.admins.map((a) => ({ value: a.id, label: a.name }))} />}
                 {filterOptions.campaigns.length > 1 && <FilterDropdown className="w-44" label="Campaigns" value={filters.campaign_id} onChange={(v) => set('campaign_id', v)} options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))} />}
                 {activeCount > 0 && (
                     <Button variant="ghost" size="sm" onClick={reset}>
@@ -92,8 +92,8 @@ export default function Dashboard({ role, cards, charts, recentActivity, followU
                     <BarList data={charts.byPaymentStatus} />
                 </Card>
                 {isSuper ? (
-                    <Card title="Leads by branch">
-                        <BarList data={charts.byBranch} onSelect={(r) => (window.location.href = leadsUrl({ branch_id: r.id }))} />
+                    <Card title="Leads by admin">
+                        <BarList data={charts.byAdmin} onSelect={(r) => (window.location.href = leadsUrl({ admin_id: r.id }))} />
                     </Card>
                 ) : (
                     <Card title={isManager ? 'Advisor distribution' : 'Manager-wise distribution'}>

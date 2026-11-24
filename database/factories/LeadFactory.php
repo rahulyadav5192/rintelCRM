@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\User;
@@ -27,11 +26,11 @@ class LeadFactory extends Factory
         ];
     }
 
-    /** Places the lead in a branch + campaign with the campaign's default statuses. */
-    public function for_(Branch $branch, Campaign $campaign, ?User $assignee = null): static
+    /** Places the lead in a campaign, owned by an admin, with the campaign's default statuses. */
+    public function for_(Campaign $campaign, ?User $admin = null, ?User $assignee = null): static
     {
-        return $this->afterMaking(function (Lead $lead) use ($branch, $campaign, $assignee) {
-            $lead->branch_id = $branch->id;
+        return $this->afterMaking(function (Lead $lead) use ($admin, $campaign, $assignee) {
+            $lead->admin_id = $admin?->id;
             $lead->campaign_id = $campaign->id;
             $lead->assigned_to = $assignee?->id;
             $lead->lead_status_id = $campaign->defaultLeadStatus()->id;

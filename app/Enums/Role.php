@@ -5,19 +5,19 @@ namespace App\Enums;
 enum Role: string
 {
     case SuperAdmin = 'super_admin';
-    case BranchAdmin = 'branch_admin';
+    case Admin = 'admin';
     case Manager = 'manager';
 
     public function label(): string
     {
         return match ($this) {
             self::SuperAdmin => 'Super Admin',
-            self::BranchAdmin => 'Branch Admin',
+            self::Admin => 'Admin',
             self::Manager => 'Manager',
         };
     }
 
-    /** Roles that are scoped to a branch and campaign assignments. */
+    /** Roles restricted to their campaign assignments. */
     public function isScoped(): bool
     {
         return $this !== self::SuperAdmin;

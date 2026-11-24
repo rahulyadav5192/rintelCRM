@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { Activity, BarChart3, Building2, ChevronDown, ChevronsLeft, ChevronsRight, Globe, LayoutDashboard, Megaphone, Settings, Users, UsersRound, X, FolderKanban } from 'lucide-react';
+import { Activity, BarChart3, ChevronDown, ListChecks, ChevronsLeft, ChevronsRight, Globe, LayoutDashboard, Megaphone, Settings, Users, UsersRound, X, FolderKanban } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function Logo({ collapsed }) {
@@ -50,10 +50,10 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
     const main = [
         { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
         { href: '/leads', label: 'Leads', icon: UsersRound, show: true, active: leadsActive },
-        { href: '/branches', label: 'Branches', icon: Building2, show: can.viewBranches },
         { href: '/campaigns', label: 'Campaigns', icon: Megaphone, show: can.viewCampaigns },
-        { href: '/users', label: auth.user.role === 'super_admin' ? 'Users' : 'Managers', icon: Users, show: can.viewUsers },
-        { href: '/public-forms', label: 'Public Lead Forms', icon: Globe, show: can.managePublicForms },
+        { href: '/statuses', label: 'Status Management', icon: ListChecks, show: can.manageStatuses },
+        { href: '/users', label: 'Users', icon: Users, show: can.viewUsers },
+        { href: '/public-forms', label: can.managePublicForms ? 'Public Lead Forms' : 'My Public Form', icon: Globe, show: can.managePublicForms || can.viewOwnPublicForm },
         { href: '/reports', label: 'Reports', icon: BarChart3, show: can.viewReports },
         { href: '/activity-logs', label: 'Activity Logs', icon: Activity, show: can.viewActivityLogs },
         { href: '/settings', label: 'Settings', icon: Settings, show: can.manageSettings },

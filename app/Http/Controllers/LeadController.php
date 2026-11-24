@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Enums\Permission;
 use App\Enums\Role;
 use App\Http\Requests\LeadRequest;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\CampaignLeadStatus;
 use App\Models\CampaignPaymentStatus;
@@ -29,7 +28,7 @@ class LeadController extends Controller
         $filters = LeadFilters::fromRequest($request);
 
         $leads = LeadFilters::applySort(LeadFilters::query($user, $filters), $filters)
-            ->with(['branch:id,name', 'campaign:id,name,code', 'assignee:id,name', 'creator:id,name', 'leadStatus:id,name,color', 'paymentStatus:id,name,color'])
+            ->with(['admin:id,name', 'campaign:id,name,code', 'assignee:id,name', 'creator:id,name', 'leadStatus:id,name,color', 'paymentStatus:id,name,color'])
             ->paginate(min(max((int) $request->query('per_page', 15), 10), 100))
             ->withQueryString()
             ->through(fn (Lead $lead) => [
@@ -39,7 +38,7 @@ class LeadController extends Controller
                 'name' => $lead->full_name,
                 'mobile' => $lead->mobile,
                 'email' => $lead->email,
-                'branch' => $lead->branch?->name,
+                'admin' => $lead->admin?->name,
                 'campaign' => $lead->campaign?->name,
                 'assignee' => $lead->assignee?->name,
                 'lead_status' => $lead->leadStatus?->only('name', 'color'),
@@ -68,7 +67,6 @@ class LeadController extends Controller
             'previewLeadNumber' => $this->leads->previewLeadNumber(),
             'defaults' => [
                 'lead_date' => now()->toDateString(),
-                'branch_id' => $user->isSuperAdmin() ? null : $user->branch_id,
                 'campaign_id' => $request->integer('campaign_id') ?: null,
             ],
         ]);
@@ -87,7 +85,7 @@ class LeadController extends Controller
         $this->authorize('view', $lead);
         $user = $request->user();
         $lead->load([
-            'branch:id,name', 'campaign:id,name,code', 'assignee:id,name,email', 'creator:id,name',
+            'admin:id,name', 'campaign:id,name,code', 'assignee:id,name,email', 'creator:id,name',
             'leadStatus:id,name,color', 'paymentStatus:id,name,color',
             'activities.user:id,name',
         ]);
@@ -98,7 +96,7 @@ class LeadController extends Controller
                 ...$this->leadFormData($lead),
                 'full_name' => $lead->full_name,
                 'source' => $lead->source,
-                'branch' => $lead->branch?->name,
+                'admin' => $lead->admin?->name,
                 'campaign' => $lead->campaign?->only('name', 'code'),
                 'assignee' => $lead->assignee?->only('name', 'email'),
                 'creator' => $lead->creator?->name ?? ($lead->source === 'public' ? 'Public form' : null),
@@ -124,20 +122,13 @@ class LeadController extends Controller
     {
         $this->authorize('update', $lead);
         $user = $request->user();
-        $lead->load(['branch:id,name', 'campaign:id,name']);
+        $lead->load(['campaign:id,name', 'admin:id,name']);
 
         $options = $this->formOptions($user);
-        // Keep the lead's current (possibly now inactive) branch/campaign selectable so the form renders.
-        if (! collect($options['branches'])->contains('id', $lead->branch_id)) {
-            $options['branches'][] = ['id' => $lead->branch_id, 'name' => $lead->branch?->name, 'campaigns' => []];
+        // Keep the lead's current (possibly now inactive) campaign selectable so the form renders.
+        if (! collect($options['campaigns'])->contains('id', $lead->campaign_id)) {
+            $options['campaigns'][] = ['id' => $lead->campaign_id, 'name' => $lead->campaign?->name];
         }
-        $options['branches'] = collect($options['branches'])->map(function ($b) use ($lead) {
-            if ($b['id'] === $lead->branch_id && ! collect($b['campaigns'])->contains('id', $lead->campaign_id)) {
-                $b['campaigns'][] = ['id' => $lead->campaign_id, 'name' => $lead->campaign?->name];
-            }
-
-            return $b;
-        })->values()->all();
 
         $lead->load(['leadStatus:id,name', 'paymentStatus:id,name', 'assignee:id,name']);
 
@@ -148,10 +139,11 @@ class LeadController extends Controller
                 'lead_status' => $lead->leadStatus?->only('id', 'name'),
                 'payment_status' => $lead->paymentStatus?->only('id', 'name'),
                 'assignee' => $lead->assignee?->only('id', 'name'),
+                'admin' => $lead->admin?->only('id', 'name'),
             ],
             'abilities' => [
                 'editDetails' => $user->hasPermission(Permission::EditLeads),
-                'changeBranch' => $user->isSuperAdmin(),
+                'changeOwner' => $user->isSuperAdmin(),
                 'assign' => $user->hasPermission(Permission::AssignLeads),
                 'updateStatus' => $user->hasPermission(Permission::UpdateLeadStatus),
                 'updatePaymentStatus' => $user->hasPermission(Permission::UpdatePaymentStatus),
@@ -191,7 +183,7 @@ class LeadController extends Controller
             'email' => $lead->email,
             'house_number' => $lead->house_number,
             'post_code' => $lead->post_code,
-            'branch_id' => $lead->branch_id,
+            'admin_id' => $lead->admin_id,
             'campaign_id' => $lead->campaign_id,
             'assigned_to' => $lead->assigned_to,
             'lead_status_id' => $lead->lead_status_id,
@@ -201,23 +193,14 @@ class LeadController extends Controller
         ];
     }
 
-    /** Branches → campaigns tree limited to what the user may create/assign leads in. */
+    /** Campaigns the user may create/assign leads in, plus what they may choose on the form. */
     private function formOptions(User $user): array
     {
-        $campaignsQuery = Campaign::query()->active()->accessibleBy($user)->with(['branches' => fn ($q) => $q->active()->select('branches.id')])->orderBy('name');
-        $campaigns = $campaignsQuery->get(['campaigns.id', 'campaigns.name']);
-
-        $branches = $this->leads->creatableBranches($user)->map(fn (Branch $b) => [
-            'id' => $b->id,
-            'name' => $b->name,
-            'campaigns' => $campaigns->filter(fn ($c) => $c->branches->contains('id', $b->id))->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
-        ])->values()->all();
-
         return [
-            'branches' => $branches,
+            'campaigns' => $this->leads->creatableCampaigns($user)->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
             'titles' => Lead::TITLES,
-            'branchLocked' => ! $user->isSuperAdmin(),
-            'canSetDate' => $user->isSuperAdmin() || ($user->isBranchAdmin() && $user->hasPermission(Permission::EditLeads)),
+            'canChooseOwner' => $this->leads->canChooseOwner($user),
+            'canSetDate' => $user->isSuperAdmin() || ($user->isAdmin() && $user->hasPermission(Permission::EditLeads)),
             'canAssign' => $user->hasPermission(Permission::AssignLeads),
             'currentUserId' => $user->id,
         ];
@@ -228,8 +211,7 @@ class LeadController extends Controller
         $campaignIds = $user->isSuperAdmin() ? null : $user->campaignIds();
 
         $managers = User::query()->withTrashed()->where('role', Role::Manager->value)
-            ->when(! $user->isSuperAdmin(), fn ($q) => $q->where('branch_id', $user->branch_id)
-                ->whereHas('campaigns', fn ($c) => $c->whereIn('campaigns.id', $campaignIds ?: [0])))
+            ->when(! $user->isSuperAdmin(), fn ($q) => $q->whereHas('campaigns', fn ($c) => $c->whereIn('campaigns.id', $campaignIds ?: [0])))
             ->orderBy('name')->get(['id', 'name']);
 
         $statusQuery = fn (string $model) => $model::query()
@@ -237,12 +219,12 @@ class LeadController extends Controller
             ->orderBy('campaign_id')->orderBy('sort_order')->get(['id', 'name', 'campaign_id']);
 
         return [
-            'branches' => Branch::query()->accessibleBy($user)->orderBy('name')->get(['id', 'name']),
+            'admins' => $user->isSuperAdmin() ? User::withTrashed()->where('role', Role::Admin->value)->orderBy('name')->get(['id', 'name']) : [],
             'campaigns' => Campaign::query()->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name']),
             'managers' => $managers,
             'leadStatuses' => $statusQuery(CampaignLeadStatus::class),
             'paymentStatuses' => $statusQuery(CampaignPaymentStatus::class),
-            'showBranchFilter' => $user->isSuperAdmin(),
+            'showAdminFilter' => $user->isSuperAdmin(),
         ];
     }
 }

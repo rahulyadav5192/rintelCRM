@@ -45,19 +45,18 @@ export default function Show({ campaign, users, canManage }) {
                             ))}
                         </ul>
                     </Card>
-                    <Card title="Users" description="Managers and admins with access to this campaign" padded={false}>
+                    <Card title="Users" description="Admins and managers with access to this campaign" padded={false}>
                         {users.length === 0 ? (
                             <EmptyState title="No users assigned" />
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-line">
-                                    <thead className="bg-subtle/80"><tr><th className="th">Name</th><th className="th">Role</th><th className="th">Branch</th><th className="th">Status</th></tr></thead>
+                                    <thead className="bg-subtle/80"><tr><th className="th">Name</th><th className="th">Role</th><th className="th">Status</th></tr></thead>
                                     <tbody className="divide-y divide-line">
                                         {users.map((u) => (
                                             <tr key={u.id}>
                                                 <td className="td"><p className="font-medium text-ink">{u.name}</p><p className="text-xs text-muted">{u.email}</p></td>
                                                 <td className="td text-gray-600">{u.role}</td>
-                                                <td className="td text-gray-600">{u.branch ?? '—'}</td>
                                                 <td className="td"><ActiveBadge active={u.is_active} /></td>
                                             </tr>
                                         ))}
@@ -72,7 +71,6 @@ export default function Show({ campaign, users, canManage }) {
                         <DetailList items={[
                             { label: 'Accessible leads', value: formatNumber(campaign.leads_count) },
                             { label: 'Created', value: formatDate(campaign.created_at) },
-                            { label: 'Branches', value: campaign.branches.map((b) => b.name).join(', '), full: true },
                             { label: 'Public statuses', value: campaign.public_show_statuses ? 'Visible to visitors' : 'Hidden (defaults used)', full: true },
                         ]} />
                     </Card>

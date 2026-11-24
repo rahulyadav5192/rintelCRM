@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Hash, Loader2, Lock } from 'lucide-react';
 import Card from './Card';
 import FormInput from './FormInput';
@@ -8,36 +8,35 @@ import DatePicker from './DatePicker';
 import { getJson } from '@/lib/utils';
 
 /**
- * Shared create/edit lead form. Branch → campaign options come from props (already scoped by
- * the server); advisors and campaign statuses are loaded on demand from the lookup endpoint.
+ * Shared create/edit lead form. Campaign options come from props (already scoped by the server);
+ * owning admins, advisors and campaign statuses are loaded on demand from the lookup endpoint.
  */
-export default function LeadForm({ form, branches, titles, branchLocked, canSetDate, canAssign, currentUserId, leadNumber, isPreview, abilities, currentOptions }) {
+export default function LeadForm({ form, campaigns, titles, canChooseOwner, canSetDate, canAssign, currentUserId, leadNumber, isPreview, abilities, currentOptions }) {
     const { data, setData, errors } = form;
-    const [options, setOptions] = useState({ managers: [], lead_statuses: [], payment_statuses: [] });
+    const [options, setOptions] = useState({ managers: [], admins: [], lead_statuses: [], payment_statuses: [] });
     const [loadingOptions, setLoadingOptions] = useState(false);
     const [optionsError, setOptionsError] = useState(null);
     const userChangedCampaign = useRef(false);
 
-    const can = abilities ?? { editDetails: true, changeBranch: !branchLocked, assign: canAssign, updateStatus: true, updatePaymentStatus: true };
-    const branch = useMemo(() => branches.find((b) => String(b.id) === String(data.branch_id)), [branches, data.branch_id]);
-    const campaigns = branch?.campaigns ?? [];
+    const can = abilities ?? { editDetails: true, changeOwner: canChooseOwner, assign: canAssign, updateStatus: true, updatePaymentStatus: true };
 
-    // Load advisors + statuses whenever the branch/campaign combination changes.
+    // Load owners, advisors and statuses whenever the campaign changes.
     useEffect(() => {
-        if (!data.branch_id || !data.campaign_id) {
-            setOptions({ managers: [], lead_statuses: [], payment_statuses: [] });
+        if (!data.campaign_id) {
+            setOptions({ managers: [], admins: [], lead_statuses: [], payment_statuses: [] });
             return;
         }
         let cancelled = false;
         setLoadingOptions(true);
         setOptionsError(null);
-        getJson(`/lookup/branches/${data.branch_id}/campaigns/${data.campaign_id}`)
+        getJson(`/lookup/campaigns/${data.campaign_id}`)
             .then((res) => {
                 if (cancelled) return;
                 // Keep the lead's current (possibly deactivated) values selectable on edit.
                 const merge = (list, current) => (current && !list.some((i) => i.id === current.id) ? [...list, { ...current, name: `${current.name} (inactive)` }] : list);
                 const next = {
                     managers: userChangedCampaign.current ? res.managers : merge(res.managers, currentOptions?.assignee),
+                    admins: userChangedCampaign.current ? res.admins : merge(res.admins, currentOptions?.admin),
                     lead_statuses: userChangedCampaign.current ? res.lead_statuses : merge(res.lead_statuses, currentOptions?.lead_status),
                     payment_statuses: userChangedCampaign.current ? res.payment_statuses : merge(res.payment_statuses, currentOptions?.payment_status),
                 };
@@ -46,7 +45,8 @@ export default function LeadForm({ form, branches, titles, branchLocked, canSetD
                     const defLead = res.lead_statuses.find((s) => s.is_default) ?? res.lead_statuses[0];
                     const defPay = res.payment_statuses.find((s) => s.is_default) ?? res.payment_statuses[0];
                     const self = !canAssign && res.managers.find((m) => m.id === currentUserId);
-                    setData((d) => ({ ...d, lead_status_id: defLead?.id ?? '', payment_status_id: defPay?.id ?? '', assigned_to: self ? self.id : '' }));
+                    // Keep the chosen owner only if they also have the new campaign.
+                    setData((d) => ({ ...d, lead_status_id: defLead?.id ?? '', payment_status_id: defPay?.id ?? '', assigned_to: self ? self.id : '', admin_id: res.admins.some((a) => String(a.id) === String(d.admin_id)) ? d.admin_id : '' }));
                 }
             })
             .catch(() => !cancelled && setOptionsError('Could not load advisors and statuses for this campaign.'))
@@ -54,12 +54,8 @@ export default function LeadForm({ form, branches, titles, branchLocked, canSetD
         return () => {
             cancelled = true;
         };
-    }, [data.branch_id, data.campaign_id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [data.campaign_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const onBranchChange = (value) => {
-        userChangedCampaign.current = true;
-        setData((d) => ({ ...d, branch_id: value, campaign_id: '', assigned_to: '', lead_status_id: '', payment_status_id: '' }));
-    };
     const onCampaignChange = (value) => {
         userChangedCampaign.current = true;
         setData((d) => ({ ...d, campaign_id: value, assigned_to: '', lead_status_id: '', payment_status_id: '' }));
@@ -101,24 +97,34 @@ export default function LeadForm({ form, branches, titles, branchLocked, canSetD
                 </fieldset>
             </Card>
 
-            <Card title="Assignment" description="Advisors are limited to active managers of the selected branch and campaign.">
+            <Card title="Assignment" description="Owners are admins who have the campaign; advisors are active managers of the campaign.">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-                    {branchLocked || !can.changeBranch ? (
-                        <FormInput label="Branch" name="branch_display" value={branch?.name ?? ''} disabled readOnly icon={Lock} error={errors.branch_id} />
-                    ) : (
-                        <FormSelect label="Branch" name="branch_id" value={data.branch_id ?? ''} onChange={(e) => onBranchChange(e.target.value)} options={toOptions(branches)} placeholder="Select branch" error={errors.branch_id} required />
-                    )}
                     <FormSelect
                         label="Campaign"
                         name="campaign_id"
                         value={data.campaign_id ?? ''}
                         onChange={(e) => onCampaignChange(e.target.value)}
                         options={toOptions(campaigns)}
-                        placeholder={!data.branch_id ? 'Select a branch first' : campaigns.length ? 'Select campaign' : 'No campaigns available'}
-                        disabled={!data.branch_id || !can.editDetails}
+                        placeholder={campaigns.length ? 'Select campaign' : 'No campaigns available'}
+                        disabled={!can.editDetails}
                         error={errors.campaign_id}
                         required
                     />
+                    {canChooseOwner && can.changeOwner ? (
+                        <FormSelect
+                            label="Admin (owner)"
+                            name="admin_id"
+                            value={data.admin_id ?? ''}
+                            onChange={(e) => setData('admin_id', e.target.value)}
+                            options={toOptions(options.admins)}
+                            placeholder={dependentPlaceholder ?? (options.admins.length ? 'No admin (Super Admin only)' : 'No admins have this campaign')}
+                            disabled={!data.campaign_id || loadingOptions}
+                            error={errors.admin_id}
+                            hint={!errors.admin_id ? 'The admin who can see and manage this lead.' : undefined}
+                        />
+                    ) : (
+                        <FormInput label="Admin (owner)" name="admin_display" value={canChooseOwner ? (currentOptions?.admin?.name ?? 'No admin') : 'You'} disabled readOnly icon={Lock} error={errors.admin_id} />
+                    )}
                     <div>
                         <FormSelect
                             label="Campaign manager / Advisor"
@@ -130,7 +136,7 @@ export default function LeadForm({ form, branches, titles, branchLocked, canSetD
                             disabled={!data.campaign_id || loadingOptions || !can.assign}
                             error={errors.assigned_to}
                         />
-                        {noManagers && !errors.assigned_to && <p className="mt-1.5 text-xs text-amber-600">No active managers are assigned to this campaign in this branch.</p>}
+                        {noManagers && !errors.assigned_to && <p className="mt-1.5 text-xs text-amber-600">No active managers are assigned to this campaign.</p>}
                     </div>
                 </div>
             </Card>

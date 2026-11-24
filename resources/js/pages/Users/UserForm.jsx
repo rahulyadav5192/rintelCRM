@@ -3,21 +3,19 @@ import FormInput from '@/components/FormInput';
 import FormSelect from '@/components/FormSelect';
 import Toggle, { Checkbox } from '@/components/Toggle';
 import CheckboxList from '@/components/CheckboxList';
-import { Lock } from 'lucide-react';
 
-export default function UserForm({ form, roles, branches, permissions, defaultPermissions, branchLocked, isEdit, isSelf }) {
+const ROLE_HELP = {
+    super_admin: 'Unrestricted access to every campaign, lead, user and setting.',
+    admin: 'Sees and manages only the leads they own (created by them or received through their public form) in their campaigns. A public lead form URL is created automatically.',
+    manager: 'Works leads in their campaigns. Managers are not tied to any admin.',
+};
+
+export default function UserForm({ form, roles, campaigns, permissions, defaultPermissions, isEdit, isSelf }) {
     const { data, setData, errors } = form;
     const scoped = data.role && data.role !== 'super_admin';
-    const branch = branches.find((b) => String(b.id) === String(data.branch_id));
     const rolePermissions = permissions.filter((p) => p.roles.includes(data.role));
 
-    const changeRole = (role) => {
-        setData((d) => ({ ...d, role, permissions: defaultPermissions[role] ?? [], ...(role === 'super_admin' ? { branch_id: '', campaign_ids: [] } : {}) }));
-    };
-    const changeBranch = (branchId) => {
-        const valid = new Set((branches.find((b) => String(b.id) === String(branchId))?.campaigns ?? []).map((c) => c.id));
-        setData((d) => ({ ...d, branch_id: branchId, campaign_ids: d.campaign_ids.filter((id) => valid.has(id)) }));
-    };
+    const changeRole = (role) => setData((d) => ({ ...d, role, permissions: defaultPermissions[role] ?? [], ...(role === 'super_admin' ? { campaign_ids: [] } : {}) }));
     const togglePermission = (value, on) => setData('permissions', on ? [...data.permissions, value] : data.permissions.filter((p) => p !== value));
 
     return (
@@ -31,49 +29,42 @@ export default function UserForm({ form, roles, branches, permissions, defaultPe
                 </div>
             </Card>
 
-            <Card title="2. Role & branch">
+            <Card title="2. Role">
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                    <FormSelect label="Role" name="role" value={data.role} onChange={(e) => changeRole(e.target.value)} options={roles} placeholder={roles.length > 1 ? 'Select role' : undefined} error={errors.role} required disabled={isSelf} hint={isSelf ? 'You cannot change your own role.' : undefined} />
-                    {scoped &&
-                        (branchLocked ? (
-                            <FormInput label="Branch" name="branch_display" value={branch?.name ?? ''} icon={Lock} disabled readOnly />
-                        ) : (
-                            <FormSelect label="Branch" name="branch_id" value={data.branch_id ?? ''} onChange={(e) => changeBranch(e.target.value)} options={branches.map((b) => ({ value: b.id, label: b.is_active ? b.name : `${b.name} (inactive)` }))} placeholder="Select branch" error={errors.branch_id} required />
-                        ))}
+                    <FormSelect label="Role" name="role" value={data.role} onChange={(e) => changeRole(e.target.value)} options={roles} placeholder="Select role" error={errors.role} required disabled={isSelf} hint={isSelf ? 'You cannot change your own role.' : undefined} />
                     {data.role === 'manager' && (
                         <FormSelect
                             label="Lead visibility"
                             name="lead_visibility"
-                            className="sm:col-span-2"
                             value={data.lead_visibility}
                             onChange={(e) => setData('lead_visibility', e.target.value)}
                             options={[
-                                { value: 'campaign', label: 'All branch leads in assigned campaigns' },
+                                { value: 'campaign', label: 'All leads in assigned campaigns' },
                                 { value: 'assigned', label: 'Only leads assigned to this manager' },
                             ]}
                             error={errors.lead_visibility}
                         />
                     )}
                 </div>
-                {data.role === 'super_admin' && <p className="mt-4 rounded-lg bg-subtle p-3 text-sm text-muted">Super Admins have unrestricted access to every branch, campaign and setting.</p>}
+                {data.role && <p className="mt-4 rounded-lg bg-subtle p-3 text-sm text-muted">{ROLE_HELP[data.role]}</p>}
             </Card>
 
             {scoped && (
-                <Card title="3. Campaign access" description="The user only sees leads in these campaigns. Campaigns are limited to those assigned to the selected branch.">
+                <Card title="3. Campaign access" description="The user can only work with leads in these campaigns.">
                     <CheckboxList
                         required
-                        options={(branch?.campaigns ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.is_active ? null : 'Inactive' }))}
+                        options={campaigns.map((c) => ({ value: c.id, label: c.name, hint: c.is_active ? null : 'Inactive' }))}
                         value={data.campaign_ids}
                         onChange={(v) => setData('campaign_ids', v)}
                         error={errors.campaign_ids}
-                        emptyText={data.branch_id ? 'This branch has no campaigns assigned yet.' : 'Select a branch first.'}
+                        emptyText="No campaigns exist yet — create one first."
                         columns={3}
                     />
                 </Card>
             )}
 
             {scoped && rolePermissions.length > 0 && (
-                <Card title="4. Permissions" description="What this user is allowed to do with leads they can access.">
+                <Card title="4. Permissions" description="What this user is allowed to do with the leads they can access.">
                     {errors.permissions && <p className="mb-3 text-xs text-red-600">{errors.permissions}</p>}
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {rolePermissions.map((p) => (
@@ -84,7 +75,7 @@ export default function UserForm({ form, roles, branches, permissions, defaultPe
             )}
 
             <Card title="Account status">
-                <Toggle label="Active" description="Inactive users cannot sign in. Their leads and history are preserved." checked={data.is_active} disabled={isSelf} onChange={(v) => setData('is_active', v)} />
+                <Toggle label="Active" description="Inactive users cannot sign in, and an inactive admin's public form stops accepting leads. Their leads and history are preserved." checked={data.is_active} disabled={isSelf} onChange={(v) => setData('is_active', v)} />
             </Card>
         </div>
     );

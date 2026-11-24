@@ -2,34 +2,34 @@
 
 namespace App\Policies;
 
-use App\Enums\Permission;
 use App\Models\User;
 
+/** User management (admins and managers alike) is reserved for Super Admins. */
 class UserPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isSuperAdmin() || ($user->isBranchAdmin() && $user->hasPermission(Permission::ManageUsers));
+        return $user->isSuperAdmin();
     }
 
     public function view(User $user, User $target): bool
     {
-        return User::query()->manageableBy($user)->whereKey($target->id)->exists();
+        return $user->isSuperAdmin();
     }
 
     public function create(User $user): bool
     {
-        return $this->viewAny($user);
+        return $user->isSuperAdmin();
     }
 
     public function update(User $user, User $target): bool
     {
-        return $this->view($user, $target);
+        return $user->isSuperAdmin();
     }
 
-    /** Nobody can deactivate themselves (prevents locking out the last admin by accident). */
+    /** Nobody can deactivate themselves (prevents locking out the last Super Admin by accident). */
     public function toggleStatus(User $user, User $target): bool
     {
-        return $user->id !== $target->id && $this->view($user, $target);
+        return $user->isSuperAdmin() && $user->id !== $target->id;
     }
 }

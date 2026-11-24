@@ -2,7 +2,6 @@
 
 namespace Database\Factories;
 
-use App\Models\Branch;
 use App\Models\Campaign;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -38,11 +37,5 @@ class CampaignFactory extends Factory
     public function inactive(): static
     {
         return $this->afterMaking(fn (Campaign $c) => $c->is_active = false);
-    }
-
-    /** @param array<Branch> $branches */
-    public function forBranches(array $branches): static
-    {
-        return $this->afterCreating(fn (Campaign $c) => $c->branches()->sync(array_map(fn ($b) => $b->id, $branches)));
     }
 }

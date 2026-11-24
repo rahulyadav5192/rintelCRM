@@ -3,7 +3,6 @@
 namespace App\Http\Middleware;
 
 use App\Enums\Permission;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -36,7 +35,7 @@ class HandleInertiaRequests extends Middleware
 
     private function authPayload(User $user): array
     {
-        $user->loadMissing(['branch:id,name', 'permissions']);
+        $user->loadMissing(['permissions']);
 
         return [
             'user' => [
@@ -45,15 +44,15 @@ class HandleInertiaRequests extends Middleware
                 'email' => $user->email,
                 'role' => $user->role->value,
                 'role_label' => $user->role->label(),
-                'branch' => $user->branch?->only('id', 'name'),
                 'permissions' => $user->permissionValues(),
             ],
             // Navigation hints only — every route is independently authorized on the server.
             'can' => [
-                'viewBranches' => $user->can('viewAny', Branch::class),
                 'viewCampaigns' => $user->can('viewAny', Campaign::class),
                 'viewUsers' => $user->can('viewAny', User::class),
                 'managePublicForms' => $user->can('manage-public-forms'),
+                'manageStatuses' => $user->can('manage-statuses'),
+                'viewOwnPublicForm' => $user->isAdmin(),
                 'viewReports' => $user->can('view-reports'),
                 'viewActivityLogs' => $user->can('view-activity-logs'),
                 'manageSettings' => $user->can('manage-settings'),

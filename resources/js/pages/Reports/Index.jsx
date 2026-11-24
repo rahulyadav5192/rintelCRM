@@ -20,17 +20,17 @@ export default function Index({ type, types, rows, total, filters: initial, canE
     const isDate = type === 'date';
     const exportUrl = (format) => withQuery('/reports', { ...filters, type, export: format });
     const leadsLink = (row) => {
-        const key = { branch: 'branch_id', campaign: 'campaign_id', manager: 'assigned_to' }[type];
+        const key = { admin: 'admin_id', campaign: 'campaign_id', manager: 'assigned_to' }[type];
         if (isDate) return withQuery('/leads', { ...filters, type: undefined, date_from: row.date, date_to: row.date });
         if (!key) return null;
-        return withQuery('/leads', { ...filters, type: undefined, [key]: row.id ?? (type === 'manager' ? 'unassigned' : undefined) });
+        return withQuery('/leads', { ...filters, type: undefined, [key]: row.id ?? (type === 'manager' ? 'unassigned' : 'none') });
     };
 
     return (
         <AppLayout title="Reports" breadcrumbs={[{ label: 'Reports' }]}>
             <PageHeader
                 title="Reports"
-                description={auth.user.role === 'super_admin' ? 'Lead volumes across all branches and campaigns.' : 'Lead volumes for the data you can access.'}
+                description={auth.user.role === 'super_admin' ? 'Lead volumes across all admins and campaigns.' : 'Lead volumes for the data you can access.'}
                 actions={
                     canExport && (
                         <>
@@ -52,7 +52,7 @@ export default function Index({ type, types, rows, total, filters: initial, canE
             <div className="card mb-6 grid grid-cols-1 gap-2 p-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
                 <input type="date" aria-label="From date" title="From date" value={filters.date_from ?? ''} onChange={(e) => set('date_from', e.target.value)} className="input h-9" />
                 <input type="date" aria-label="To date" title="To date" value={filters.date_to ?? ''} onChange={(e) => set('date_to', e.target.value)} className="input h-9" />
-                {filterOptions.branches.length > 0 && <FilterDropdown label="Branches" value={filters.branch_id} onChange={(v) => set('branch_id', v)} options={filterOptions.branches.map((b) => ({ value: b.id, label: b.name }))} />}
+                {filterOptions.admins.length > 0 && <FilterDropdown label="Admins" value={filters.admin_id} onChange={(v) => set('admin_id', v)} options={[{ value: 'none', label: 'No admin' }, ...filterOptions.admins.map((a) => ({ value: a.id, label: a.name }))]} />}
                 <FilterDropdown label="Campaigns" value={filters.campaign_id} onChange={(v) => setMany({ campaign_id: v, lead_status_id: '', payment_status_id: '' })} options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))} />
                 <FilterDropdown label="Managers" value={filters.assigned_to} onChange={(v) => set('assigned_to', v)} options={[{ value: 'unassigned', label: 'Unassigned' }, ...filterOptions.managers.map((m) => ({ value: m.id, label: m.name }))]} />
                 <FilterDropdown label="Lead statuses" value={filters.lead_status_id} onChange={(v) => set('lead_status_id', v)} options={scopedStatuses(filterOptions.leadStatuses).map((s) => ({ value: s.id, label: statusLabel(s) }))} />

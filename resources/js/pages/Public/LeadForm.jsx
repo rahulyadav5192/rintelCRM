@@ -7,7 +7,7 @@ import FormSelect from '@/components/FormSelect';
 import FormTextarea from '@/components/FormTextarea';
 import { getJson } from '@/lib/utils';
 
-export default function LeadForm({ available, branch, campaigns, titles, formToken, texts, submitted }) {
+export default function LeadForm({ available, campaigns, titles, formToken, texts, submitted }) {
     const token = typeof window !== 'undefined' ? window.location.pathname.split('/').filter(Boolean).pop() : '';
     const [options, setOptions] = useState({ managers: [], lead_statuses: [], payment_statuses: [] });
     const [loading, setLoading] = useState(false);
@@ -36,7 +36,6 @@ export default function LeadForm({ available, branch, campaigns, titles, formTok
                 <div className="mb-8 flex items-center gap-2.5">
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500 text-base font-bold text-white">R</span>
                     <span className="text-base font-semibold text-ink">Rintel</span>
-                    {branch && <span className="ml-auto text-sm text-muted">{branch.name}</span>}
                 </div>
 
                 {!available ? (

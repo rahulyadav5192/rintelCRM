@@ -16,7 +16,7 @@ export default function Index({ settings }) {
                 <Card title="Lead IDs" description="Applies to leads created from now on. Existing lead IDs never change.">
                     <FormInput label="Lead ID prefix" name="lead_number_prefix" value={data.lead_number_prefix} onChange={(e) => setData('lead_number_prefix', e.target.value.toUpperCase())} error={errors.lead_number_prefix} required maxLength={6} hint={`Example: ${data.lead_number_prefix || 'RL'}-000123`} className="max-w-xs" />
                 </Card>
-                <Card title="Public lead form" description="Text shown to visitors on every branch's public form.">
+                <Card title="Public lead form" description="Text shown to visitors on every admin's public form.">
                     <div className="space-y-5">
                         <FormInput label="Heading" name="public_form_heading" value={data.public_form_heading} onChange={(e) => setData('public_form_heading', e.target.value)} error={errors.public_form_heading} required />
                         <FormTextarea label="Introduction" name="public_form_intro" rows={2} value={data.public_form_intro ?? ''} onChange={(e) => setData('public_form_intro', e.target.value)} error={errors.public_form_intro} />

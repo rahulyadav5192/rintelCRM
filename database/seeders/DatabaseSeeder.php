@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Enums\Permission;
 use App\Enums\Role;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\PublicLeadForm;
@@ -21,9 +20,6 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         DB::transaction(function () {
-            $main = $this->branch('Main Branch', 'MAIN', 'Sarah Thompson');
-            $second = $this->branch('Branch 2', 'BR2', 'James Carter');
-
             $campaigns = [
                 'IVA' => $this->campaign('IVA', 'IVA', 'Individual Voluntary Arrangement leads.', true,
                     [['New', 'blue'], ['Contacted', 'amber'], ['Interested', 'violet'], ['Documents Pending', 'orange'], ['Completed', 'green'], ['Rejected', 'red']]),
@@ -35,41 +31,35 @@ class DatabaseSeeder extends Seeder
                     [['New', 'blue'], ['Contacted', 'amber'], ['Survey Booked', 'violet'], ['Claim Submitted', 'indigo'], ['Completed', 'green'], ['Rejected', 'red']]),
             ];
 
-            $main->campaigns()->sync(collect($campaigns)->pluck('id'));
-            $second->campaigns()->sync([$campaigns['IVA']->id, $campaigns['TDS']->id, $campaigns['Solar']->id]);
-
-            $this->user('Super Admin', 'superadmin@rintel.test', Role::SuperAdmin);
-            $this->user('Main Branch Admin', 'branchadmin@rintel.test', Role::BranchAdmin, $main, [$campaigns['IVA'], $campaigns['TDS'], $campaigns['Solar'], $campaigns['HDR']],
-                [...Permission::defaultsFor(Role::BranchAdmin), Permission::ExportLeads, Permission::ManageUsers, Permission::DeleteLeads]);
-            $this->user('Branch 2 Admin', 'branch2admin@rintel.test', Role::BranchAdmin, $second, [$campaigns['IVA'], $campaigns['TDS']], Permission::defaultsFor(Role::BranchAdmin));
-
-            $managers = [
-                $this->user('Priya Patel', 'manager@rintel.test', Role::Manager, $main, [$campaigns['IVA'], $campaigns['TDS']],
-                    [Permission::EditLeads, Permission::UpdateLeadStatus, Permission::UpdatePaymentStatus, Permission::ExportLeads, Permission::ViewReports, Permission::CreateLeads]),
-                $this->user('Daniel Hughes', 'manager2@rintel.test', Role::Manager, $main, [$campaigns['Solar'], $campaigns['HDR']],
-                    Permission::defaultsFor(Role::Manager)),
-                $this->user('Aisha Khan', 'manager3@rintel.test', Role::Manager, $second, [$campaigns['IVA'], $campaigns['TDS'], $campaigns['Solar']],
-                    Permission::defaultsFor(Role::Manager), User::VISIBILITY_ASSIGNED),
-                $this->user('Tom Wilson', 'manager4@rintel.test', Role::Manager, $second, [$campaigns['Solar']],
-                    Permission::defaultsFor(Role::Manager)),
+            $super = $this->user('Super Admin', 'superadmin@rintel.test', Role::SuperAdmin);
+            $admins = [
+                $this->user('Olivia Bennett', 'admin@rintel.test', Role::Admin, array_values($campaigns),
+                    [...Permission::defaultsFor(Role::Admin), Permission::ExportLeads, Permission::DeleteLeads]),
+                $this->user('Marcus Reed', 'admin2@rintel.test', Role::Admin, [$campaigns['IVA'], $campaigns['TDS']], Permission::defaultsFor(Role::Admin)),
             ];
 
-            foreach ([$main, $second] as $branch) {
-                $form = new PublicLeadForm(['is_active' => true]);
-                $form->branch_id = $branch->id;
-                $form->rotateToken();
-                $form->save();
+            $managers = [
+                $this->user('Priya Patel', 'manager@rintel.test', Role::Manager, [$campaigns['IVA'], $campaigns['TDS']],
+                    [Permission::EditLeads, Permission::UpdateLeadStatus, Permission::UpdatePaymentStatus, Permission::ExportLeads, Permission::ViewReports, Permission::CreateLeads]),
+                $this->user('Daniel Hughes', 'manager2@rintel.test', Role::Manager, [$campaigns['Solar'], $campaigns['HDR']], Permission::defaultsFor(Role::Manager)),
+                $this->user('Aisha Khan', 'manager3@rintel.test', Role::Manager, [$campaigns['IVA'], $campaigns['TDS'], $campaigns['Solar']],
+                    Permission::defaultsFor(Role::Manager), User::VISIBILITY_ASSIGNED),
+                $this->user('Tom Wilson', 'manager4@rintel.test', Role::Manager, [$campaigns['Solar']], Permission::defaultsFor(Role::Manager)),
+            ];
+
+            $forms = [];
+            foreach ($admins as $admin) {
+                $forms[$admin->id] = PublicLeadForm::ensureFor($admin, $super->id);
             }
 
-            // Sample leads spread over the last ~90 days.
-            $super = User::where('email', 'superadmin@rintel.test')->first();
-            foreach ([$main, $second] as $branch) {
-                foreach ($branch->campaigns()->get() as $campaign) {
-                    $eligible = collect($managers)->filter(fn (User $m) => $m->branch_id === $branch->id && $m->campaigns->contains('id', $campaign->id))->values();
+            // Sample leads spread over the last ~90 days, owned by admins that have the campaign.
+            foreach ($admins as $admin) {
+                foreach ($admin->campaigns as $campaign) {
+                    $eligible = collect($managers)->filter(fn (User $m) => $m->campaigns->contains('id', $campaign->id))->values();
                     $statuses = $campaign->leadStatuses()->get();
                     $payments = $campaign->paymentStatuses()->get();
-                    for ($i = 0; $i < 18; $i++) {
-                        $lead = Lead::factory()->for_($branch, $campaign, $eligible->isNotEmpty() && $i % 5 !== 0 ? $eligible->random() : null)->make([
+                    for ($i = 0; $i < 16; $i++) {
+                        $lead = Lead::factory()->for_($campaign, $admin, $eligible->isNotEmpty() && $i % 5 !== 0 ? $eligible->random() : null)->make([
                             'lead_date' => now()->subDays(random_int(0, 90))->toDateString(),
                             'notes' => $i % 3 === 0 ? fake()->sentence(12) : null,
                             'follow_up_date' => $i % 4 === 0 ? now()->addDays(random_int(-3, 10))->toDateString() : null,
@@ -77,25 +67,19 @@ class DatabaseSeeder extends Seeder
                         $lead->lead_status_id = $statuses->random()->id;
                         $lead->payment_status_id = $payments->random()->id;
                         $lead->source = $i % 6 === 0 ? 'public' : 'manual';
-                        $lead->created_by = $lead->source === 'public' ? null : $super->id;
+                        $lead->created_by = $lead->source === 'public' ? null : ($i % 2 ? $admin->id : $super->id);
+                        $lead->public_lead_form_id = $lead->source === 'public' ? $forms[$admin->id]->id : null;
                         $lead->save();
                         $lead->lead_number = 'RL-'.str_pad((string) $lead->id, 6, '0', STR_PAD_LEFT);
                         $lead->saveQuietly();
-                        $lead->activities()->create(['type' => 'created', 'description' => $lead->source === 'public' ? 'Lead submitted via public form' : 'Lead created', 'user_id' => $lead->source === 'public' ? null : $super->id]);
+                        if ($lead->source === 'public') {
+                            $forms[$admin->id]->increment('submissions_count');
+                        }
+                        $lead->activities()->create(['type' => 'created', 'description' => $lead->source === 'public' ? 'Lead submitted via public form' : 'Lead created', 'user_id' => $lead->created_by]);
                     }
                 }
             }
         });
-    }
-
-    private function branch(string $name, string $code, string $contact): Branch
-    {
-        $branch = new Branch(['name' => $name, 'code' => $code, 'contact_person' => $contact, 'contact_number' => '020 7946 0'.random_int(100, 999),
-            'email' => strtolower($code).'@rintel.test', 'address' => fake()->streetAddress().', London']);
-        $branch->is_active = true;
-        $branch->save();
-
-        return $branch;
     }
 
     private function campaign(string $name, string $code, string $description, bool $public, array $statuses): Campaign
@@ -113,11 +97,10 @@ class DatabaseSeeder extends Seeder
         return $campaign;
     }
 
-    private function user(string $name, string $email, Role $role, ?Branch $branch = null, array $campaigns = [], array $permissions = [], string $visibility = User::VISIBILITY_CAMPAIGN): User
+    private function user(string $name, string $email, Role $role, array $campaigns = [], array $permissions = [], string $visibility = User::VISIBILITY_CAMPAIGN): User
     {
         $user = new User(['name' => $name, 'email' => $email, 'mobile' => '07700 900'.random_int(100, 999), 'password' => Hash::make('password')]);
         $user->role = $role;
-        $user->branch_id = $branch?->id;
         $user->lead_visibility = $visibility;
         $user->is_active = true;
         $user->email_verified_at = now();

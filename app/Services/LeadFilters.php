@@ -9,12 +9,12 @@ use Illuminate\Http\Request;
 
 /**
  * Applies listing filters to a lead query. Always starts from Lead::visibleTo($user), so
- * filters can only ever narrow what the user is allowed to see — a branch_id or campaign_id
+ * filters can only ever narrow what the user is allowed to see — an admin_id or campaign_id
  * the user has no access to simply yields no rows.
  */
 class LeadFilters
 {
-    public const KEYS = ['search', 'branch_id', 'campaign_id', 'assigned_to', 'lead_status_id', 'payment_status_id', 'date_from', 'date_to', 'source', 'sort', 'direction'];
+    public const KEYS = ['search', 'admin_id', 'campaign_id', 'assigned_to', 'lead_status_id', 'payment_status_id', 'date_from', 'date_to', 'source', 'sort', 'direction'];
 
     public const SORTABLE = [
         'lead_number' => 'leads.id',
@@ -57,10 +57,16 @@ class LeadFilters
             });
         }
 
-        foreach (['branch_id', 'campaign_id', 'lead_status_id', 'payment_status_id'] as $key) {
+        foreach (['campaign_id', 'lead_status_id', 'payment_status_id'] as $key) {
             if (isset($filters[$key]) && ctype_digit($filters[$key])) {
                 $query->where("leads.$key", (int) $filters[$key]);
             }
+        }
+
+        if (isset($filters['admin_id'])) {
+            $filters['admin_id'] === 'none'
+                ? $query->whereNull('leads.admin_id')
+                : (ctype_digit($filters['admin_id']) ? $query->where('leads.admin_id', (int) $filters['admin_id']) : null);
         }
 
         if (isset($filters['assigned_to'])) {

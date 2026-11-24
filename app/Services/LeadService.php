@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\Permission;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\CampaignLeadStatus;
 use App\Models\CampaignPaymentStatus;
@@ -18,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Lead business rules shared by the authenticated CRM and the public lead form:
- * which branch/campaign/manager/status combinations are valid, lead ID generation,
+ * which owner/campaign/manager/status combinations are valid, lead ID generation,
  * permission-aware updates and the lead activity timeline.
  */
 class LeadService
@@ -27,21 +26,26 @@ class LeadService
 
     // ---- Option sources (also used by the lookup endpoints) -------------------------------
 
-    /** Active branches the user may create leads in. */
-    public function creatableBranches(User $user): Collection
+    /** Active campaigns the user may create leads in. */
+    public function creatableCampaigns(User $user): Collection
     {
-        return Branch::query()->active()->accessibleBy($user)->orderBy('name')->get(['id', 'name', 'code']);
+        return Campaign::query()->active()->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name', 'campaigns.code']);
     }
 
-    /** Active campaigns the user may use for leads in a branch. */
-    public function creatableCampaigns(User $user, int $branchId): Collection
+    public function eligibleManagers(int $campaignId): Collection
     {
-        return Campaign::query()->active()->inBranch($branchId)->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name', 'campaigns.code']);
+        return User::query()->eligibleManagers($campaignId)->orderBy('name')->get(['id', 'name']);
     }
 
-    public function eligibleManagers(int $branchId, int $campaignId): Collection
+    public function eligibleAdmins(int $campaignId): Collection
     {
-        return User::query()->eligibleManagers($branchId, $campaignId)->orderBy('name')->get(['id', 'name']);
+        return User::query()->eligibleAdmins($campaignId)->orderBy('name')->get(['id', 'name']);
+    }
+
+    /** Admins choose nobody: their leads are always their own. Super Admins and Managers pick the owner. */
+    public function canChooseOwner(User $user): bool
+    {
+        return ! $user->isAdmin();
     }
 
     public function statusOptions(Campaign $campaign): array
@@ -65,18 +69,18 @@ class LeadService
      */
     public function create(array $data, ?User $actor, ?PublicLeadForm $form = null): Lead
     {
-        $branch = $this->resolveBranchForCreate($data, $actor, $form);
-        $campaign = $this->resolveCampaignForCreate($data, $actor, $branch, $form);
+        $campaign = $this->resolveCampaignForCreate($data, $actor, $form);
+        $adminId = $this->resolveOwnerForCreate($data, $actor, $form, $campaign);
 
         $assignedTo = $data['assigned_to'] ?? null;
         if ($actor?->isManager() && ! $assignedTo && ! $actor->hasPermission(Permission::AssignLeads)) {
             // A manager creating a lead owns it by default when eligible.
-            $assignedTo = User::query()->eligibleManagers($branch->id, $campaign->id)->whereKey($actor->id)->exists() ? $actor->id : null;
+            $assignedTo = User::query()->eligibleManagers($campaign->id)->whereKey($actor->id)->exists() ? $actor->id : null;
         }
         if ($assignedTo && $actor?->isManager() && ! $actor->hasPermission(Permission::AssignLeads) && (int) $assignedTo !== $actor->id) {
             throw ValidationException::withMessages(['assigned_to' => 'You can only assign leads to yourself.']);
         }
-        $this->assertEligibleManager($assignedTo, $branch->id, $campaign->id);
+        $this->assertEligibleManager($assignedTo, $campaign->id);
 
         $canPickStatus = $form ? $campaign->public_show_statuses : true;
         $leadStatus = $this->resolveStatus(CampaignLeadStatus::class, $canPickStatus ? ($data['lead_status_id'] ?? null) : null, $campaign, 'lead_status_id');
@@ -86,14 +90,14 @@ class LeadService
             throw ValidationException::withMessages(['campaign_id' => 'This campaign has no active lead statuses configured.']);
         }
 
-        return DB::transaction(function () use ($data, $actor, $form, $branch, $campaign, $assignedTo, $leadStatus, $paymentStatus) {
+        return DB::transaction(function () use ($data, $actor, $form, $adminId, $campaign, $assignedTo, $leadStatus, $paymentStatus) {
             $lead = new Lead;
             $lead->fill(collect($data)->only([...self::DETAIL_FIELDS, 'follow_up_date'])->all());
-            $canSetDate = $actor && ($actor->isSuperAdmin() || ($actor->isBranchAdmin() && $actor->hasPermission(Permission::EditLeads)));
+            $canSetDate = $actor && ($actor->isSuperAdmin() || ($actor->isAdmin() && $actor->hasPermission(Permission::EditLeads)));
             if (! $canSetDate || empty($data['lead_date'])) {
                 $lead->lead_date = now()->toDateString();
             }
-            $lead->branch_id = $branch->id;
+            $lead->admin_id = $adminId;
             $lead->campaign_id = $campaign->id;
             $lead->assigned_to = $assignedTo;
             $lead->lead_status_id = $leadStatus->id;
@@ -119,7 +123,7 @@ class LeadService
             }
 
             ActivityLogger::log('leads', 'lead.created', "Lead {$lead->lead_number} created".($form ? ' via public form' : ''), $lead->id, null, [
-                'branch' => $branch->name, 'campaign' => $campaign->name,
+                'admin' => $adminId ? User::withTrashed()->find($adminId)?->name : null, 'campaign' => $campaign->name,
             ], $actor?->id);
 
             return $lead;
@@ -130,7 +134,7 @@ class LeadService
 
     public function update(Lead $lead, array $data, User $actor): Lead
     {
-        $lead->loadMissing(['campaign', 'branch', 'leadStatus', 'paymentStatus', 'assignee']);
+        $lead->loadMissing(['campaign', 'admin', 'leadStatus', 'paymentStatus', 'assignee']);
 
         $changed = fn (string $key) => array_key_exists($key, $data) && (string) ($data[$key] ?? '') !== (string) ($this->currentValue($lead, $key) ?? '');
 
@@ -138,8 +142,8 @@ class LeadService
         if ($detailChanges && ! $actor->hasPermission(Permission::EditLeads)) {
             throw new AuthorizationException('You do not have permission to edit lead details.');
         }
-        if ($changed('branch_id') && ! $actor->isSuperAdmin()) {
-            throw new AuthorizationException('Only Super Admins can move a lead to another branch.');
+        if ($changed('admin_id') && ! $actor->isSuperAdmin()) {
+            throw new AuthorizationException('Only Super Admins can change the admin who owns a lead.');
         }
         if ($changed('assigned_to') && ! $actor->hasPermission(Permission::AssignLeads)) {
             throw new AuthorizationException('You do not have permission to assign leads.');
@@ -151,17 +155,17 @@ class LeadService
             throw new AuthorizationException('You do not have permission to change the payment status.');
         }
 
-        // Resolve target branch / campaign.
-        $branch = $lead->branch;
-        if ($changed('branch_id')) {
-            $branch = Branch::query()->active()->find((int) $data['branch_id'])
-                ?? throw ValidationException::withMessages(['branch_id' => 'Select an active branch.']);
-        }
+        // Resolve target campaign / owner.
         $campaign = $lead->campaign;
-        $campaignChanged = $changed('campaign_id') || $branch->id !== $lead->branch_id;
+        $campaignChanged = $changed('campaign_id');
         if ($campaignChanged) {
-            $campaign = Campaign::query()->active()->inBranch($branch->id)->accessibleBy($actor)->find((int) ($data['campaign_id'] ?? $lead->campaign_id))
-                ?? throw ValidationException::withMessages(['campaign_id' => 'Select an active campaign available in this branch that you have access to.']);
+            $campaign = Campaign::query()->active()->accessibleBy($actor)->find((int) $data['campaign_id'])
+                ?? throw ValidationException::withMessages(['campaign_id' => 'Select an active campaign that you have access to.']);
+        }
+        $adminId = $changed('admin_id') ? ((int) $data['admin_id'] ?: null) : $lead->admin_id;
+        $ownerChanged = (int) $adminId !== (int) $lead->admin_id;
+        if ($adminId && ($ownerChanged || $campaignChanged)) {
+            $this->assertEligibleAdmin($adminId, $campaign->id);
         }
 
         // Assignment.
@@ -171,10 +175,10 @@ class LeadService
         $assignmentChanged = (int) $assignedTo !== (int) $lead->assigned_to;
         if ($assignmentChanged || ($campaignChanged && $assignedTo)) {
             if ($campaignChanged && ! $assignmentChanged && $assignedTo
-                && ! User::query()->eligibleManagers($branch->id, $campaign->id)->whereKey($assignedTo)->exists()) {
-                throw ValidationException::withMessages(['assigned_to' => 'The current advisor is not eligible for the new branch/campaign. Choose another advisor.']);
+                && ! User::query()->eligibleManagers($campaign->id)->whereKey($assignedTo)->exists()) {
+                throw ValidationException::withMessages(['assigned_to' => 'The current advisor is not assigned to the new campaign. Choose another advisor.']);
             }
-            $this->assertEligibleManager($assignedTo, $branch->id, $campaign->id);
+            $this->assertEligibleManager($assignedTo, $campaign->id);
         }
 
         // Statuses (must belong to the — possibly new — campaign).
@@ -195,7 +199,7 @@ class LeadService
             throw ValidationException::withMessages(['lead_status_id' => 'This campaign has no active lead statuses configured.']);
         }
 
-        return DB::transaction(function () use ($lead, $data, $actor, $branch, $campaign, $assignedTo, $leadStatus, $paymentStatus, $assignmentChanged) {
+        return DB::transaction(function () use ($lead, $data, $actor, $adminId, $campaign, $assignedTo, $leadStatus, $paymentStatus, $assignmentChanged) {
             $before = $this->snapshot($lead);
             $oldAssignee = $lead->assignee?->name;
             $oldStatus = $lead->leadStatus?->name;
@@ -207,17 +211,17 @@ class LeadService
             if ($actor->hasPermission(Permission::UpdateLeadStatus) && array_key_exists('follow_up_date', $data)) {
                 $lead->follow_up_date = $data['follow_up_date'] ?: null;
             }
-            $lead->branch_id = $branch->id;
+            $lead->admin_id = $adminId;
             $lead->campaign_id = $campaign->id;
             $lead->assigned_to = $assignedTo;
             $lead->lead_status_id = $leadStatus->id;
             $lead->payment_status_id = $paymentStatus?->id;
             $lead->updated_by = $actor->id;
             $lead->save();
-            $lead->load(['branch', 'campaign', 'assignee', 'leadStatus', 'paymentStatus']);
+            $lead->load(['admin', 'campaign', 'assignee', 'leadStatus', 'paymentStatus']);
 
             $after = $this->snapshot($lead);
-            $detailKeys = [...self::DETAIL_FIELDS, 'follow_up_date', 'branch', 'campaign'];
+            $detailKeys = [...self::DETAIL_FIELDS, 'follow_up_date', 'admin', 'campaign'];
             [$old, $new] = ActivityLogger::diff(array_intersect_key($before, array_flip($detailKeys)), array_intersect_key($after, array_flip($detailKeys)));
             if ($new) {
                 $this->activity($lead, $actor, 'updated', 'Lead information edited ('.implode(', ', array_map(fn ($k) => str_replace('_', ' ', $k), array_keys($new))).')', $old, $new);
@@ -270,45 +274,50 @@ class LeadService
 
     // ---- Internals ----------------------------------------------------------------------
 
-    private function resolveBranchForCreate(array $data, ?User $actor, ?PublicLeadForm $form): Branch
+    private function resolveCampaignForCreate(array $data, ?User $actor, ?PublicLeadForm $form): Campaign
     {
         if ($form) {
-            $branch = $form->branch;
-            if (! $branch || ! $branch->is_active) {
-                throw ValidationException::withMessages(['branch_id' => 'This form is not accepting submissions.']);
-            }
-
-            return $branch;
-        }
-
-        if (! $actor->isSuperAdmin()) {
-            if (! empty($data['branch_id']) && (int) $data['branch_id'] !== (int) $actor->branch_id) {
-                throw ValidationException::withMessages(['branch_id' => 'You can only create leads in your own branch.']);
-            }
-            $data['branch_id'] = $actor->branch_id;
-        }
-
-        return Branch::query()->active()->find((int) ($data['branch_id'] ?? 0))
-            ?? throw ValidationException::withMessages(['branch_id' => 'Select an active branch.']);
-    }
-
-    private function resolveCampaignForCreate(array $data, ?User $actor, Branch $branch, ?PublicLeadForm $form): Campaign
-    {
-        $query = Campaign::query()->active()->inBranch($branch->id);
-        if ($form) {
-            $query->where('is_public', true);
+            // Public forms offer the owning admin's active, public campaigns only.
+            $query = $form->admin->campaigns()->active()->where('is_public', true);
         } else {
-            $query->accessibleBy($actor);
+            $query = Campaign::query()->active()->accessibleBy($actor);
         }
 
         return $query->find((int) ($data['campaign_id'] ?? 0))
-            ?? throw ValidationException::withMessages(['campaign_id' => 'Select a valid campaign for this branch.']);
+            ?? throw ValidationException::withMessages(['campaign_id' => 'Select a valid campaign.']);
     }
 
-    private function assertEligibleManager(mixed $userId, int $branchId, int $campaignId): void
+    /** Works out which Admin owns a new lead. */
+    private function resolveOwnerForCreate(array $data, ?User $actor, ?PublicLeadForm $form, Campaign $campaign): ?int
     {
-        if ($userId && ! User::query()->eligibleManagers($branchId, $campaignId)->whereKey((int) $userId)->exists()) {
-            throw ValidationException::withMessages(['assigned_to' => 'The selected advisor is not an active manager of this branch and campaign.']);
+        if ($form) {
+            return $form->user_id;
+        }
+        if ($actor->isAdmin()) {
+            if (! empty($data['admin_id']) && (int) $data['admin_id'] !== $actor->id) {
+                throw ValidationException::withMessages(['admin_id' => 'Leads you create are always owned by you.']);
+            }
+
+            return $actor->id;
+        }
+
+        $adminId = ! empty($data['admin_id']) ? (int) $data['admin_id'] : null;
+        $this->assertEligibleAdmin($adminId, $campaign->id);
+
+        return $adminId;
+    }
+
+    private function assertEligibleAdmin(?int $adminId, int $campaignId): void
+    {
+        if ($adminId && ! User::query()->eligibleAdmins($campaignId)->whereKey($adminId)->exists()) {
+            throw ValidationException::withMessages(['admin_id' => 'The selected admin is not active or does not have this campaign.']);
+        }
+    }
+
+    private function assertEligibleManager(mixed $userId, int $campaignId): void
+    {
+        if ($userId && ! User::query()->eligibleManagers($campaignId)->whereKey((int) $userId)->exists()) {
+            throw ValidationException::withMessages(['assigned_to' => 'The selected advisor is not an active manager of this campaign.']);
         }
     }
 
@@ -340,7 +349,7 @@ class LeadService
         return [
             ...collect(self::DETAIL_FIELDS)->mapWithKeys(fn ($k) => [$k => $this->currentValue($lead, $k)])->all(),
             'follow_up_date' => $this->currentValue($lead, 'follow_up_date'),
-            'branch' => $lead->branch?->name,
+            'admin' => $lead->admin?->name,
             'campaign' => $lead->campaign?->name,
         ];
     }

@@ -44,7 +44,7 @@ export default function Index({ leads, filters: initialFilters, filterOptions })
         { key: 'name', label: 'Name', sortable: true, render: (l) => <span className="font-medium text-ink">{l.name}</span> },
         { key: 'mobile', label: 'Mobile', sortable: true, render: (l) => <span className="text-gray-600 tabular-nums">{l.mobile}</span> },
         { key: 'email', label: 'Email', render: (l) => <span className="text-gray-600">{l.email ?? '—'}</span> },
-        ...(filterOptions.showBranchFilter ? [{ key: 'branch', label: 'Branch' }] : []),
+        ...(filterOptions.showAdminFilter ? [{ key: 'admin', label: 'Admin', render: (l) => l.admin ?? <span className="text-muted">—</span> }] : []),
         { key: 'campaign', label: 'Campaign' },
         { key: 'assignee', label: 'Advisor', render: (l) => l.assignee ?? <span className="text-muted italic">Unassigned</span> },
         { key: 'lead_status', label: 'Lead status', render: (l) => <StatusBadge color={l.lead_status?.color}>{l.lead_status?.name}</StatusBadge> },
@@ -144,7 +144,7 @@ export default function Index({ leads, filters: initialFilters, filterOptions })
                         </div>
                         {showFilters && (
                             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-                                {filterOptions.showBranchFilter && <FilterDropdown label="Branches" value={filters.branch_id} onChange={(v) => set('branch_id', v)} options={filterOptions.branches.map((b) => ({ value: b.id, label: b.name }))} />}
+                                {filterOptions.showAdminFilter && <FilterDropdown label="Admins" value={filters.admin_id} onChange={(v) => set('admin_id', v)} options={[{ value: 'none', label: 'No admin' }, ...filterOptions.admins.map((a) => ({ value: a.id, label: a.name }))]} />}
                                 <FilterDropdown label="Campaigns" value={filters.campaign_id} onChange={(v) => setMany({ campaign_id: v, lead_status_id: '', payment_status_id: '' })} options={filterOptions.campaigns.map((c) => ({ value: c.id, label: c.name }))} />
                                 <FilterDropdown label="Advisors" value={filters.assigned_to} onChange={(v) => set('assigned_to', v)} options={[{ value: 'unassigned', label: 'Unassigned' }, ...filterOptions.managers.map((m) => ({ value: m.id, label: m.name }))]} />
                                 <FilterDropdown label="Lead statuses" value={filters.lead_status_id} onChange={(v) => set('lead_status_id', v)} options={statusOptions.lead} />

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Role;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -19,9 +20,10 @@ class PublicLeadForm extends Model
         return ['is_active' => 'boolean', 'last_reset_at' => 'datetime'];
     }
 
-    public function branch(): BelongsTo
+    /** The Admin this form belongs to; every lead submitted through it is owned by them. */
+    public function admin(): BelongsTo
     {
-        return $this->belongsTo(Branch::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function leads(): HasMany
@@ -44,6 +46,21 @@ class PublicLeadForm extends Model
         return $token;
     }
 
+    /** Creates the public form for an Admin if they do not have one yet. */
+    public static function ensureFor(User $admin, ?int $createdBy = null): self
+    {
+        $form = self::query()->firstWhere('user_id', $admin->id);
+        if (! $form) {
+            $form = new self(['is_active' => true]);
+            $form->user_id = $admin->id;
+            $form->created_by = $createdBy;
+            $form->rotateToken();
+            $form->save();
+        }
+
+        return $form;
+    }
+
     public function plainToken(): string
     {
         return Crypt::decryptString($this->token_encrypted);
@@ -54,7 +71,7 @@ class PublicLeadForm extends Model
         return route('public-leads.show', $this->plainToken());
     }
 
-    /** Resolve an active form from a raw URL token; null when unknown, reset or inactive. */
+    /** Resolve an active form from a raw URL token; null when unknown, reset, inactive or the admin is inactive. */
     public static function findActiveByToken(string $token): ?self
     {
         if (strlen($token) < 32 || strlen($token) > 128) {
@@ -64,7 +81,8 @@ class PublicLeadForm extends Model
         return self::query()
             ->where('token_hash', self::hashToken($token))
             ->where('is_active', true)
-            ->with('branch')
+            ->whereHas('admin', fn ($q) => $q->where('is_active', true)->where('role', Role::Admin->value))
+            ->with('admin')
             ->first();
     }
 }

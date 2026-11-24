@@ -29,7 +29,6 @@ class UserRequest extends FormRequest
             'mobile' => ['nullable', 'string', 'max:30', 'regex:/^\+?[0-9\s\-()]{7,20}$/'],
             'password' => [$target ? 'nullable' : 'required', 'string', Password::defaults(), 'max:255'],
             'role' => ['required', new Enum(Role::class)],
-            'branch_id' => [Rule::requiredIf($scoped), 'nullable', 'integer', 'exists:branches,id'],
             'campaign_ids' => [Rule::requiredIf($scoped), 'array', $scoped ? 'min:1' : 'min:0'],
             'campaign_ids.*' => ['integer', 'exists:campaigns,id'],
             'permissions' => ['array'],
@@ -42,7 +41,6 @@ class UserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'branch_id.required' => 'Select the branch this user belongs to.',
             'campaign_ids.required' => 'Select at least one campaign.',
             'campaign_ids.min' => 'Select at least one campaign.',
         ];

@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Enums\Role;
-use App\Models\Branch;
 use App\Models\Campaign;
 use App\Models\Lead;
 use App\Models\LeadActivity;
@@ -20,9 +19,9 @@ class DashboardController extends Controller
     public function __invoke(Request $request): Response
     {
         $user = $request->user();
-        $filters = array_intersect_key(LeadFilters::fromRequest($request), array_flip(['date_from', 'date_to', 'branch_id', 'campaign_id']));
+        $filters = array_intersect_key(LeadFilters::fromRequest($request), array_flip(['date_from', 'date_to', 'admin_id', 'campaign_id']));
         if (! $user->isSuperAdmin()) {
-            unset($filters['branch_id']);
+            unset($filters['admin_id']);
         }
         $stats = new LeadStats($user, $filters);
         $today = now()->toDateString();
@@ -41,8 +40,8 @@ class DashboardController extends Controller
 
         if ($user->isSuperAdmin()) {
             $cards += [
-                'branches' => Branch::count(),
-                'active_branches' => Branch::active()->count(),
+                'admins' => User::where('role', Role::Admin->value)->count(),
+                'active_admins' => User::active()->where('role', Role::Admin->value)->count(),
                 'campaigns' => Campaign::count(),
                 'active_campaigns' => Campaign::active()->count(),
                 'users' => User::count(),
@@ -56,7 +55,7 @@ class DashboardController extends Controller
         } else {
             $cards += [
                 'unassigned' => $stats->base()->whereNull('leads.assigned_to')->count(),
-                'managers' => User::active()->where('role', Role::Manager->value)->where('branch_id', $user->branch_id)->count(),
+                'managers' => User::active()->where('role', Role::Manager->value)->whereHas('campaigns', fn ($q) => $q->whereIn('campaigns.id', $user->campaignIds() ?: [0]))->count(),
             ];
         }
 
@@ -67,7 +66,7 @@ class DashboardController extends Controller
             'daily' => $stats->daily($from, $to),
         ];
         if ($user->isSuperAdmin()) {
-            $charts['byBranch'] = $stats->byBranch();
+            $charts['byAdmin'] = $stats->byAdmin();
             $charts['monthly'] = $stats->monthly();
         } else {
             $charts['byManager'] = $stats->byManager();
@@ -99,7 +98,7 @@ class DashboardController extends Controller
             'filters' => $filters,
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
             'filterOptions' => [
-                'branches' => $user->isSuperAdmin() ? Branch::orderBy('name')->get(['id', 'name']) : [],
+                'admins' => $user->isSuperAdmin() ? User::where('role', Role::Admin->value)->orderBy('name')->get(['id', 'name']) : [],
                 'campaigns' => Campaign::query()->accessibleBy($user)->orderBy('name')->get(['campaigns.id', 'campaigns.name']),
             ],
         ]);
