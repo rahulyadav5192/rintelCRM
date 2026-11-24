@@ -18,7 +18,14 @@ export default function LeadForm({ form, campaigns, titles, canChooseOwner, canS
     const [optionsError, setOptionsError] = useState(null);
     const userChangedCampaign = useRef(false);
 
-    const can = abilities ?? { editDetails: true, changeOwner: canChooseOwner, assign: canAssign, updateStatus: true, updatePaymentStatus: true };
+    const can = { changeCampaign: true, ...(abilities ?? { editDetails: true, changeOwner: canChooseOwner, assign: canAssign, updateStatus: true, updatePaymentStatus: true }) };
+    const assignmentLocked = !can.changeCampaign && !can.changeOwner && !can.assign;
+    const statusLocked = !can.updateStatus && !can.updatePaymentStatus;
+    const viewOnly = (
+        <span className="inline-flex items-center gap-1 rounded-md bg-subtle px-2 py-0.5 text-xs font-medium text-muted ring-1 ring-line">
+            <Lock className="h-3 w-3" /> View only
+        </span>
+    );
 
     // Load owners, advisors and statuses whenever the campaign changes.
     useEffect(() => {
@@ -97,7 +104,7 @@ export default function LeadForm({ form, campaigns, titles, canChooseOwner, canS
                 </fieldset>
             </Card>
 
-            <Card title="Assignment" description="Owners are admins who have the campaign; advisors are active managers of the campaign.">
+            <Card title="Assignment" description="Owners are admins who have the campaign; advisors are active managers of the campaign." actions={assignmentLocked && viewOnly}>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                     <FormSelect
                         label="Campaign"
@@ -106,7 +113,7 @@ export default function LeadForm({ form, campaigns, titles, canChooseOwner, canS
                         onChange={(e) => onCampaignChange(e.target.value)}
                         options={toOptions(campaigns)}
                         placeholder={campaigns.length ? 'Select campaign' : 'No campaigns available'}
-                        disabled={!can.editDetails}
+                        disabled={!can.editDetails || !can.changeCampaign}
                         error={errors.campaign_id}
                         required
                     />
@@ -141,7 +148,7 @@ export default function LeadForm({ form, campaigns, titles, canChooseOwner, canS
                 </div>
             </Card>
 
-            <Card title="Status" actions={loadingOptions && <Loader2 className="h-4 w-4 animate-spin text-primary-500" />}>
+            <Card title="Status" actions={loadingOptions ? <Loader2 className="h-4 w-4 animate-spin text-primary-500" /> : statusLocked && viewOnly}>
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                     <FormSelect label="Lead status" name="lead_status_id" value={data.lead_status_id ?? ''} onChange={(e) => setData('lead_status_id', e.target.value)} options={toOptions(options.lead_statuses)} placeholder={dependentPlaceholder ?? 'Campaign default'} disabled={!data.campaign_id || loadingOptions || !can.updateStatus} error={errors.lead_status_id} />
                     <FormSelect label="Payment status" name="payment_status_id" value={data.payment_status_id ?? ''} onChange={(e) => setData('payment_status_id', e.target.value)} options={toOptions(options.payment_statuses)} placeholder={dependentPlaceholder ?? 'Campaign default'} disabled={!data.campaign_id || loadingOptions || !can.updatePaymentStatus} error={errors.payment_status_id} />

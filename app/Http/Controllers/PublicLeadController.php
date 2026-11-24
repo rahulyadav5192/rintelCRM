@@ -91,7 +91,7 @@ class PublicLeadController extends Controller
         ], [
             'mobile.regex' => 'Enter a valid mobile number.',
             'post_code.regex' => 'Enter a valid post code.',
-            'campaign_id.required' => 'Please choose a service.',
+            'campaign_id.required' => 'Please choose a campaign.',
         ]);
 
         $this->leads->create($data, null, $form);

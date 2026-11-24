@@ -143,6 +143,8 @@ class LeadController extends Controller
             ],
             'abilities' => [
                 'editDetails' => $user->hasPermission(Permission::EditLeads),
+                // Admins can only view a lead's campaign, assignment and status.
+                'changeCampaign' => $user->hasPermission(Permission::EditLeads) && ! $user->isAdmin(),
                 'changeOwner' => $user->isSuperAdmin(),
                 'assign' => $user->hasPermission(Permission::AssignLeads),
                 'updateStatus' => $user->hasPermission(Permission::UpdateLeadStatus),

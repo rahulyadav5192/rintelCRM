@@ -49,7 +49,10 @@ enum Permission: string
     {
         return match ($role) {
             Role::SuperAdmin => [],
-            Role::Admin, Role::Manager => self::cases(),
+            // Admins can only view a lead's assignment and status once it exists, so the
+            // assign / status / payment-status permissions never apply to them.
+            Role::Admin => [self::CreateLeads, self::EditLeads, self::DeleteLeads, self::ExportLeads, self::ViewReports],
+            Role::Manager => self::cases(),
         };
     }
 
@@ -57,7 +60,7 @@ enum Permission: string
     {
         return match ($role) {
             Role::SuperAdmin => [],
-            Role::Admin => [self::CreateLeads, self::EditLeads, self::AssignLeads, self::UpdateLeadStatus, self::UpdatePaymentStatus, self::ViewReports],
+            Role::Admin => [self::CreateLeads, self::EditLeads, self::ViewReports],
             Role::Manager => [self::UpdateLeadStatus, self::UpdatePaymentStatus],
         };
     }

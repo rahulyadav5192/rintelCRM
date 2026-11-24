@@ -29,7 +29,7 @@ export default function Edit({ lead, campaigns, titles, canChooseOwner, canSetDa
         form.put(`/leads/${lead.id}`);
     };
 
-    const limited = !abilities.editDetails;
+    const limited = !abilities.editDetails || !abilities.changeCampaign || !abilities.assign || !abilities.updateStatus || !abilities.updatePaymentStatus;
 
     return (
         <AppLayout title={`Edit ${lead.lead_number}`} breadcrumbs={[{ label: 'Leads', href: '/leads' }, { label: lead.lead_number, href: `/leads/${lead.id}` }, { label: 'Edit' }]}>

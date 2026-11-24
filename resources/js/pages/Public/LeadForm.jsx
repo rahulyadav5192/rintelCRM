@@ -54,7 +54,7 @@ export default function LeadForm({ available, campaigns, titles, formToken, text
                 ) : campaigns.length === 0 ? (
                     <div className="card p-10 text-center">
                         <AlertCircle className="mx-auto h-10 w-10 text-gray-300" />
-                        <h1 className="mt-4 text-lg font-semibold text-ink">No services are currently available</h1>
+                        <h1 className="mt-4 text-lg font-semibold text-ink">No campaigns are currently available</h1>
                         <p className="mt-1 text-sm text-muted">Please check back later.</p>
                     </div>
                 ) : (
@@ -70,7 +70,7 @@ export default function LeadForm({ available, campaigns, titles, formToken, text
                                 <label>Website<input type="text" tabIndex={-1} autoComplete="off" value={data.website} onChange={(e) => setData('website', e.target.value)} /></label>
                             </div>
 
-                            <FormSelect label="Service" name="campaign_id" value={data.campaign_id} onChange={(e) => setData((d) => ({ ...d, campaign_id: e.target.value, assigned_to: '', lead_status_id: '', payment_status_id: '' }))} options={campaigns.map((c) => ({ value: c.id, label: c.name }))} placeholder="Choose a service" error={errors.campaign_id} required />
+                            <FormSelect label="Campaign" name="campaign_id" value={data.campaign_id} onChange={(e) => setData((d) => ({ ...d, campaign_id: e.target.value, assigned_to: '', lead_status_id: '', payment_status_id: '' }))} options={campaigns.map((c) => ({ value: c.id, label: c.name }))} placeholder="Choose a campaign" error={errors.campaign_id} required />
                             {campaign?.description && <p className="-mt-3 text-xs text-muted">{campaign.description}</p>}
 
                             <div className="grid grid-cols-1 gap-5 sm:grid-cols-6">

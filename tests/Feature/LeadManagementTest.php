@@ -77,9 +77,43 @@ class LeadManagementTest extends TestCase
 
     public function test_reassignment_to_eligible_manager_is_logged(): void
     {
-        $this->actingAs($this->adminA)->put("/leads/{$this->ivaLeadA->id}", $this->currentPayload($this->ivaLeadA, ['assigned_to' => $this->managerB->id]))->assertSessionHasNoErrors();
+        $this->actingAs($this->super)->put("/leads/{$this->ivaLeadA->id}", $this->currentPayload($this->ivaLeadA, ['assigned_to' => $this->managerB->id]))->assertSessionHasNoErrors();
         $this->assertSame($this->managerB->id, $this->ivaLeadA->fresh()->assigned_to);
         $this->assertDatabaseHas('lead_activities', ['lead_id' => $this->ivaLeadA->id, 'type' => 'reassigned']);
+    }
+
+    public function test_admin_can_edit_details_but_only_view_assignment_and_status(): void
+    {
+        $contacted = $this->iva->leadStatuses()->where('name', 'Contacted')->first();
+        $paid = $this->iva->paymentStatuses()->where('name', 'Paid')->first();
+        $refused = [
+            ['assigned_to' => $this->managerB->id],
+            ['lead_status_id' => $contacted->id],
+            ['payment_status_id' => $paid->id],
+            ['follow_up_date' => now()->addDay()->toDateString()],
+            ['campaign_id' => $this->solar->id],
+        ];
+        foreach ($refused as $change) {
+            $this->actingAs($this->adminA)->put("/leads/{$this->ivaLeadA->id}", $this->currentPayload($this->ivaLeadA, $change))->assertForbidden();
+        }
+        $fresh = $this->ivaLeadA->fresh();
+        $this->assertSame($this->managerA->id, $fresh->assigned_to);
+        $this->assertSame($this->ivaLeadA->lead_status_id, $fresh->lead_status_id);
+        $this->assertSame($this->ivaLeadA->payment_status_id, $fresh->payment_status_id);
+        $this->assertSame($this->iva->id, $fresh->campaign_id);
+
+        // Personal details are still editable.
+        $this->actingAs($this->adminA)->put("/leads/{$this->ivaLeadA->id}", $this->currentPayload($this->ivaLeadA, ['first_name' => 'Edited']))->assertSessionHasNoErrors();
+        $this->assertSame('Edited', $this->ivaLeadA->fresh()->first_name);
+
+        // Even an explicitly stored grant has no effect for an admin.
+        $this->adminA->permissions()->create(['permission' => Permission::UpdateLeadStatus->value]);
+        $this->actingAs($this->adminA->fresh())->put("/leads/{$this->ivaLeadA->id}", $this->currentPayload($this->ivaLeadA, ['lead_status_id' => $contacted->id]))->assertForbidden();
+
+        // The edit page tells the UI which sections are locked.
+        $this->actingAs($this->adminA)->get("/leads/{$this->ivaLeadA->id}/edit")->assertOk()->assertInertia(fn ($page) => $page
+            ->where('abilities.editDetails', true)->where('abilities.changeCampaign', false)->where('abilities.assign', false)
+            ->where('abilities.updateStatus', false)->where('abilities.updatePaymentStatus', false));
     }
 
     public function test_campaign_specific_lead_statuses_are_validated(): void

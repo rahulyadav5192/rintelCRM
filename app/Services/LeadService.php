@@ -142,6 +142,9 @@ class LeadService
         if ($detailChanges && ! $actor->hasPermission(Permission::EditLeads)) {
             throw new AuthorizationException('You do not have permission to edit lead details.');
         }
+        if ($actor->isAdmin() && $changed('campaign_id')) {
+            throw new AuthorizationException('Admins can view but not change a lead\'s campaign, assignment or status.');
+        }
         if ($changed('admin_id') && ! $actor->isSuperAdmin()) {
             throw new AuthorizationException('Only Super Admins can change the admin who owns a lead.');
         }
